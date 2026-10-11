@@ -8,6 +8,7 @@ using LambdaRag.Core.Semantic;
 using LambdaRag.Core;
 using LambdaRag.Core.Abstractions;
 using LambdaRag.Core.Domain;
+using LambdaRag.Core.Ontology;
 using LambdaRag.Evaluation;
 using LambdaRag.Evaluation.Engine;
 using LambdaRag.Indexing;
@@ -46,6 +47,7 @@ static class CliEntry
                 "author"   => await AuthorAsync(args.Skip(1).ToArray()),
                 "index"    => await IndexAsync(args.Skip(1).ToArray()),
                 "topic-map" => await TopicMapAsync(args.Skip(1).ToArray()),
+                "ontology" => await OntologyCommand.RunAsync(args.Skip(1).ToArray()),
                 "extract-rules" => await ExtractRulesAsync(args.Skip(1).ToArray()),
                 "rules"    => await RulesCommand.RunAsync(args.Skip(1).ToArray(), TimeProvider.System),
                 "ruleset"  => await RulesetAsync(args.Skip(1).ToArray()),
@@ -87,6 +89,7 @@ static class CliEntry
               lambda-rag topic-map list
               lambda-rag topic-map show <id-or-path>
               lambda-rag topic-map coverage --ruleset <path> [--topic-map <id-or-path>]
+              lambda-rag ontology compile|inspect|diff|validate|replay [args]
               lambda-rag extract-rules --policy-dir <dir> --domain <name> --id <ruleset-id> --out <path>
                                        [--min-chars 200] [--prefix <id-prefix>]
               lambda-rag rules diff     <old.json> <new.json> [--out diff.json]
@@ -98,6 +101,8 @@ static class CliEntry
             Common flags:
               --topic-map <id-or-path>   Override default contract.v1 topic map.
                                          Try `lambda-rag topic-map list` for ids.
+                            --ontology-snapshot <path> Use a validated accepted ontology snapshot.
+                            --ontology-mode static|dynamic|hybrid (default: static).
             """);
     }
 
@@ -146,6 +151,45 @@ static class CliEntry
             }
         }
         return map;
+    }
+
+    static IDocumentProjector ResolveProjector(
+        IDocumentProjector defaultProjector,
+        IReadOnlyDictionary<string, string> flags)
+    {
+        var topicMapSpec = flags.GetValueOrDefault("topic-map");
+        var snapshotPath = flags.GetValueOrDefault("ontology-snapshot");
+        var modeText = flags.GetValueOrDefault("ontology-mode");
+        if (snapshotPath is null && modeText is null)
+        {
+            return topicMapSpec is null
+                ? defaultProjector
+                : new LambdaRag.Projection.Projectors.DeterministicContractProjector(
+                    TopicMapRegistry.Load(topicMapSpec));
+        }
+
+        var mode = modeText?.ToLowerInvariant() switch
+        {
+            null or "static" => OntologyTopicMode.Static,
+            "dynamic" => OntologyTopicMode.Dynamic,
+            "hybrid" => OntologyTopicMode.Hybrid,
+            _ => throw new ArgumentException("--ontology-mode must be static, dynamic, or hybrid."),
+        };
+        if (snapshotPath is null && mode != OntologyTopicMode.Static)
+            throw new ArgumentException("--ontology-snapshot is required for dynamic and hybrid modes.");
+        if (snapshotPath is not null && mode == OntologyTopicMode.Static)
+            throw new ArgumentException("--ontology-snapshot cannot be used with static mode.");
+
+        var staticMap = topicMapSpec is null
+            ? TopicMapRegistry.Load("contract.v1")
+            : TopicMapRegistry.Load(topicMapSpec);
+        var resolvedMap = snapshotPath is null
+            ? staticMap
+            : AcceptedOntologyTopicMapAdapter.Create(
+                OntologySnapshot.ParseStrict(File.ReadAllText(snapshotPath)),
+                mode,
+                mode == OntologyTopicMode.Dynamic ? null : staticMap);
+        return new LambdaRag.Projection.Projectors.DeterministicContractProjector(resolvedMap);
     }
 
     /// <summary>
@@ -234,10 +278,7 @@ static class CliEntry
                 await parsers.ParseAsync(documentPath));
 
         // ── Phase 2: Project ────────────────────────────────────────────
-        var topicMapSpec = f.GetValueOrDefault("topic-map");
-        var effectiveProjector = topicMapSpec is null
-            ? projector
-            : new LambdaRag.Projection.Projectors.DeterministicContractProjector(TopicMapRegistry.Load(topicMapSpec));
+        var effectiveProjector = ResolveProjector(projector, f);
         var projected = await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .StartAsync("[bold]Projecting[/] document…", async _ =>
@@ -645,10 +686,7 @@ static class CliEntry
         var projector = sp.GetRequiredService<IDocumentProjector>();
 
         var parsed = await parsers.ParseAsync(documentPath);
-        var topicMapSpec = f.GetValueOrDefault("topic-map");
-        var effectiveProjector = topicMapSpec is null
-            ? projector
-            : new LambdaRag.Projection.Projectors.DeterministicContractProjector(TopicMapRegistry.Load(topicMapSpec));
+        var effectiveProjector = ResolveProjector(projector, f);
         var projected = await effectiveProjector.ProjectAsync(parsed);
         File.WriteAllText(outPath, projected.Graph.ToJsonString(LambdaRag.Core.CanonicalJson.Options));
         Console.WriteLine($"Wrote:     {outPath}");

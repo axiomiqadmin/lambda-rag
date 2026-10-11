@@ -1,0 +1,687 @@
+﻿{
+    "schemaVersion":  "lr-contract-compliance/1.0.0",
+    "contract":  "prompt-contracts/dynamic-document-ontology-v1.md",
+    "contractLineCount":  721,
+    "asOf":  "2026-10-11",
+    "status":  "in-progress",
+    "requirementCount":  30,
+    "completeCount":  0,
+    "evidenceMissingCount":  0,
+    "requirementCoverage":  0,
+    "ontologyTestValidation":  {
+                                   "status":  "passed",
+                                   "exitCode":  0,
+                                   "summary":  null
+                               },
+    "requirements":  [
+                         {
+                             "id":  "T01",
+                             "requirementText":  "Same bytes and accepted artefacts are deterministic; repeated execution is idempotent.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Hashing/ContentHash.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyCanonicalJson.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyCompilationService.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyGenerationTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs",
+                                                  "tests/LambdaRag.IdempotencyTests/"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Ontology suite 110/110; full unit suite 963/963; bounded idempotency groups pass (accuracy 17, corpus 17, runtime 25, ARB 4, miscellaneous 8, reviewed DOCX 2, review pipeline 2); one runtime test is skipped."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T02",
+                             "requirementText":  "Canonical parsing and stable section/span identities include parser/canonicalisation versions.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/ParsedDocumentSpanAdapter.cs",
+                                                            "src/LambdaRag.Core/Ontology/CanonicalSpanEvidenceIndex.cs",
+                                                            "src/LambdaRag.Core/Ontology/CanonicalDocumentArtifact.cs",
+                                                            "src/LambdaRag.Core/Ontology/SpanIdentity.cs",
+                                                            "src/LambdaRag.Core/Ontology/SpanRecords.cs",
+                                                            "src/LambdaRag.Core/Ontology/SpanReconciler.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/ParsedDocumentSpanAdapterTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/CanonicalSpanEvidenceIndexTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/CanonicalDocumentArtifactTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/SpanReconciliationTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Ontology suite 110/110; full unit suite 963/963; primary DOCX acceptance test passes."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T03",
+                             "requirementText":  "CandidateOntologyDocument has strict versioned required fields and rejects malformed/extra/duplicate properties.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/CandidateOntologyContracts.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CandidateOntologyContractTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Strict parse/replay and invalid JSON-shape tests in ontology suite."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T04",
+                             "requirementText":  "Candidate concepts carry proposed fields and no generator-created final concept ID.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/CandidateOntologyContracts.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CandidateOntologyContractTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Candidate parser exact-property validation; full generator boundary tests pending."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T05",
+                             "requirementText":  "Every source evidence item resolves to actual canonical document spans and fingerprints.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/CandidateOntologyContracts.cs",
+                                                            "src/LambdaRag.Core/Ontology/ParsedDocumentSpanAdapter.cs",
+                                                            "src/LambdaRag.Core/Ontology/CanonicalSpanEvidenceIndex.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CandidateOntologyContractTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/CanonicalSpanEvidenceIndexTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/CloudServiceArchitectureAcceptanceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Resolver rejects wrong document/span/path/offset/text hash; DOCX acceptance resolves every concept and relationship evidence item."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T06",
+                             "requirementText":  "Accepted concept and relationship models have required fields, allow-listed types, provenance, and content fingerprints.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/AcceptedOntologyArtifacts.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologySnapshotDeltaTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Content fingerprint and endpoint validation tests in ontology suite."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T07",
+                             "requirementText":  "Snapshot and delta models are versioned, canonically serialized, and fingerprint-verifiable without volatile time fields.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/AcceptedOntologyArtifacts.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyCanonicalJson.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologySnapshotDeltaTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Array ordering and tamper tests in ontology suite."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T08",
+                             "requirementText":  "Concept IDs are deterministic and candidate identity is reconciled through ordered exact rules; ambiguity never silently merges.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/OntologyConceptReconciler.cs",
+                                                            "src/LambdaRag.Core/Ontology/AcceptedOntologyArtifacts.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyConceptReconcilerTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Exact semantic-key, alias, span-continuity, mapping, conflict, family-isolation, and ambiguity tests pass."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T09",
+                             "requirementText":  "Only changed canonical spans are sent to generation; unaffected accepted concepts remain byte-stable.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/SpanReconciler.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyCompilationService.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyGeneration.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Insertion test proves only the inserted body span reaches the fake generator and prior IDs remain stable."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T10",
+                             "requirementText":  "Generator is provider-neutral and supplies a deterministic fake for tests; live adapter is optional after phases 1-5.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/OntologyGeneration.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyGenerationTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Offline fake/cache/replay tests pass; no provider adapter is configured because the user\u0027s Azure deployments are unavailable."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T11",
+                             "requirementText":  "Candidate caching and replay avoid generator calls on valid hits and fail on fingerprint drift.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/OntologyGeneration.cs",
+                                                            "src/LambdaRag.Core/Ontology/FileOntologyArtifactStore.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyGenerationTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Cache hit call-count, no-call replay, immutable cache writes, and DOCX CLI replay succeeded."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T12",
+                             "requirementText":  "Invalid, missing, ambiguous, unsupported, or unverifiable compilation fails closed without publishing a partial snapshot.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/CandidateOntologyContracts.cs",
+                                                            "src/LambdaRag.Core/Ontology/AcceptedOntologyArtifacts.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyConceptReconciler.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyCompilationService.cs",
+                                                            "src/LambdaRag.Core/Ontology/FileOntologyArtifactStore.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CandidateOntologyContractTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologySnapshotDeltaTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/FileOntologyArtifactStoreTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Invalid evidence/ambiguity blocks compilation; blocked store test asserts no accepted snapshot file."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T13",
+                             "requirementText":  "CLI ontology compile supports initial and parent-snapshot compilation and writes separate artifacts.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Cli/OntologyCommand.cs",
+                                                            "src/LambdaRag.Core/Ontology/FileOntologyArtifactStore.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/FileOntologyArtifactStoreTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "CLI initial Cloud DOCX compile and store parent lookup smoke-tested."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T14",
+                             "requirementText":  "CLI ontology inspect distinguishes accepted and unresolved items and shows provenance.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Cli/OntologyCommand.cs"
+                                                        ],
+                             "testEvidence":  [
+
+                                              ],
+                             "validationEvidence":  [
+                                                        "DOCX snapshot inspect displayed accepted concepts and evidence counts; CLI automation test pending."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T15",
+                             "requirementText":  "CLI ontology diff displays deterministic snapshot changes.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Cli/OntologyCommand.cs"
+                                                        ],
+                             "testEvidence":  [
+
+                                              ],
+                             "validationEvidence":  [
+                                                        "Diff command implementation present; CLI-level golden test pending."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T16",
+                             "requirementText":  "CLI ontology validate checks schema, evidence, fingerprints, and references without generator calls.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Cli/OntologyCommand.cs",
+                                                            "src/LambdaRag.Core/Ontology/CandidateOntologyContracts.cs",
+                                                            "src/LambdaRag.Core/Ontology/AcceptedOntologyArtifacts.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyArtifactParser.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CandidateOntologyContractTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologySnapshotDeltaTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "All five primary DOCX artifacts passed CLI strict validation."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T17",
+                             "requirementText":  "CLI ontology replay reproduces accepted snapshots without generator calls and verifies canonical identity.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Cli/OntologyCommand.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyGeneration.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyGenerationTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Primary DOCX replay completed through cache-only generator path."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T18",
+                             "requirementText":  "Artifacts are stored transparently and accepted snapshots are never overwritten.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/FileOntologyArtifactStore.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/FileOntologyArtifactStoreTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Idempotent byte-identical retry and conflicting overwrite rejection tested."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T19",
+                             "requirementText":  "Static maps remain functional/default; accepted ontology adds static/dynamic/hybrid selection modes.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Projection/TopicMap.cs",
+                                                            "src/LambdaRag.Projection/AcceptedOntologyTopicMapAdapter.cs",
+                                                            "src/LambdaRag.Projection/Projectors/DeterministicContractProjector.cs",
+                                                            "src/LambdaRag.Cli/Program.cs",
+                                                            "src/LambdaRag.Api/Program.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Projection/TopicMapAndProjectorTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Projection/AcceptedOntologyTopicMapAdapterTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Full unit suite 963/963; adapter-specific suite passes; CLI and API dynamic DOCX projection/review smoke-tested. Static remains default."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T20",
+                             "requirementText":  "No generator is called from selection, evaluation, scoring, remediation, markup, or report rendering.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/OntologyCompilationService.cs",
+                                                            "src/LambdaRag.Cli/OntologyCommand.cs",
+                                                            "src/LambdaRag.Api/Program.cs",
+                                                            "src/LambdaRag.Evaluation/Engine/EvaluationService.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Generator is used before projection; CLI/API dynamic smoke uses accepted snapshot only. No generator is injected into evaluation."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T21",
+                             "requirementText":  "Initial compilation and exact reruns produce valid/reused snapshots without generator calls.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/OntologyCompilationService.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyGeneration.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyGenerationTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Exact rerun returns the existing snapshot and generator call count remains one."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T22",
+                             "requirementText":  "Local change, addition, alias, and support-aware removal yield justified deltas and retained IDs.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/SpanReconciler.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyConceptReconciler.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyCompilationService.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/SpanReconciliationTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyConceptReconcilerTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Local insertion, alias/addition, support retention/removal, augmentation, and stable IDs are covered in focused tests."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T23",
+                             "requirementText":  "Ambiguity, hallucinated evidence, unsupported mutation, generator order variation, and cross-document isolation are guarded.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Core/Ontology/CandidateOntologyContracts.cs",
+                                                            "src/LambdaRag.Core/Ontology/CanonicalSpanEvidenceIndex.cs",
+                                                            "src/LambdaRag.Core/Ontology/OntologyConceptReconciler.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CandidateOntologyContractTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/CanonicalSpanEvidenceIndexTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyConceptReconcilerTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Malformed/unknown evidence, ambiguous aliases, incompatible mutation, and family isolation tests pass; fake-order tests still limited to canonical candidate serialization."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T24",
+                             "requirementText":  "Existing unit/idempotency/accuracy/golden tests pass and static mode remains functional.",
+                             "implementationEvidence":  [
+                                                            "src/LambdaRag.Projection/Projectors/DeterministicContractProjector.cs"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Projection/TopicMapAndProjectorTests.cs",
+                                                  "tests/LambdaRag.IdempotencyTests/"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Full unit suite 963/963; bounded idempotency groups pass except for two documented skips (bootstrap-only ARB golden and environment-gated snapshot pull)."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T25",
+                             "requirementText":  "Benchmark corpus covers required perturbations and records raw stability/provenance/delta/replay metrics without unlabeled accuracy claims.",
+                             "implementationEvidence":  [
+                                                            "scripts/ontology_benchmark.ps1",
+                                                            "artifacts/benchmark/ontology-benchmark.json"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/OntologyCompilationServiceTests.cs",
+                                                  "tests/LambdaRag.UnitTests/Ontology/SpanReconciliationTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Quick quality gate ran 10 benchmark scenarios; machine report records stability, provenance, replay, unresolved, and delta fields; semanticAccuracyClaimed=false and independentExpectedLabelsAvailable=false. Paraphrase is fail-closed, not semantic resolution."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T26",
+                             "requirementText":  "Primary Cloud-service-Architecture.docx is processed as acceptance input.",
+                             "implementationEvidence":  [
+                                                            "samples/architecture/Cloud-service-Architecture.docx",
+                                                            "artifacts/golden/",
+                                                            "artifacts/sample-run/"
+                                                        ],
+                             "testEvidence":  [
+                                                  "tests/LambdaRag.UnitTests/Ontology/CloudServiceArchitectureAcceptanceTests.cs"
+                                              ],
+                             "validationEvidence":  [
+                                                        "Offline fake compilation passed, all five core artifact files strict-validated, and cache-only CLI replay completed. This is not semantic extraction validation."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T27",
+                             "requirementText":  "Contract analysis, gap analysis, and requirement traceability are generated and maintained.",
+                             "implementationEvidence":  [
+                                                            "docs/contract-analysis.md",
+                                                            "docs/gap-analysis.md",
+                                                            "docs/requirement-traceability.md",
+                                                            "reports/traceability-matrix.json"
+                                                        ],
+                             "testEvidence":  [
+
+                                              ],
+                             "validationEvidence":  [
+                                                        "Generated initial evidence; completeness audit pending."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T28",
+                             "requirementText":  "Independent auditor discovers requirements, implementation, tests, validations, coverage, and evidence.",
+                             "implementationEvidence":  [
+                                                            "tools/contract_auditor/audit.ps1",
+                                                            "reports/contract-compliance.json",
+                                                            "reports/contract-compliance-report.md"
+                                                        ],
+                             "testEvidence":  [
+
+                                              ],
+                             "validationEvidence":  [
+                                                        "Auditor parses the contract and machine matrix, verifies referenced paths, and runs ontology tests; its report remains in-progress because groups are partial/missing."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T29",
+                             "requirementText":  "Quality gate verifies build, lint, unit, integration, contract, acceptance, and audit outputs.",
+                             "implementationEvidence":  [
+                                                            "scripts/quality_gate.ps1",
+                                                            "reports/quality-gate.json",
+                                                            "reports/final_quality_gate.md"
+                                                        ],
+                             "testEvidence":  [
+
+                                              ],
+                             "validationEvidence":  [
+                                                        "Quick gate completed: Core/CLI/API builds, changed-scope C# formatting, 963 unit tests, 110 ontology tests, DOCX acceptance, 10 benchmark scenarios, audit, and bounded idempotency batches. Final gate is failed because two tests are skipped and the contract audit remains in-progress."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         },
+                         {
+                             "id":  "T30",
+                             "requirementText":  "Guarantees and non-guarantees are documented; no unsupported semantic-accuracy or production claims.",
+                             "implementationEvidence":  [
+                                                            "docs/contract-analysis.md",
+                                                            "docs/gap-analysis.md",
+                                                            "artifacts/benchmark/ontology-benchmark.json"
+                                                        ],
+                             "testEvidence":  [
+
+                                              ],
+                             "validationEvidence":  [
+                                                        "Benchmark declares semanticAccuracyClaimed=false and no independent expected labels; offline fake/cache/replay does not establish semantic extraction accuracy or production readiness."
+                                                    ],
+                             "missingImplementationEvidence":  [
+
+                                                               ],
+                             "missingTestEvidence":  [
+
+                                                     ],
+                             "status":  "partial"
+                         }
+                     ]
+}

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace LambdaRag.Core.Ontology;
 
@@ -102,6 +103,40 @@ public sealed record DocumentFamilyManifest
     };
 
     public byte[] ToCanonicalBytes() => OntologyCanonicalJson.SerializeToUtf8(ToCanonicalJson());
+
+    public static DocumentFamilyManifest ParseStrict(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        OntologyContractJson.RejectDuplicateProperties(root, "$" );
+        OntologyContractJson.RequireExactProperties(
+            root, "$", "canonicalisationVersion", "familyId", "manifestFingerprint",
+            "namespace", "registrant", "salt", "schemaVersion");
+
+        try
+        {
+            var schema = root.GetProperty("schemaVersion").GetString();
+            var familyId = root.GetProperty("familyId").GetString();
+            var ns = root.GetProperty("namespace").GetString();
+            var registrant = root.GetProperty("registrant").GetString();
+            var salt = root.GetProperty("salt").GetString();
+            var canonicalisationVersion = root.GetProperty("canonicalisationVersion").GetString();
+            var manifestFingerprint = root.GetProperty("manifestFingerprint").GetString();
+            if (schema != SchemaVersion || familyId is null || ns is null || registrant is null
+                || salt is null || canonicalisationVersion != OntologyCanonical.CanonicalisationVersion)
+                throw new OntologyArtifactValidationException("Family manifest metadata is invalid.");
+
+            var manifest = Register(ns, registrant, salt);
+            if (manifest.FamilyId != familyId || manifest.ManifestFingerprint != manifestFingerprint)
+                throw new OntologyArtifactValidationException("Family manifest fingerprint does not match its inputs.");
+            return manifest;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            throw new OntologyArtifactValidationException($"Invalid family manifest JSON: {ex.Message}");
+        }
+    }
 }
 
 /// <summary>

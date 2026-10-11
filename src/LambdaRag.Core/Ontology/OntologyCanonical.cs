@@ -54,6 +54,20 @@ public static class OntologyCanonical
             throw new OntologyCanonicalException($"Required field '{fieldName}' is empty.");
         return n;
     }
+
+    public static string NormalizeMultiline(string value, string fieldName = "value")
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var normalizedLines = value.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var nfc = normalizedLines.Normalize(NormalizationForm.FormC);
+        foreach (var ch in nfc)
+        {
+            if (char.IsControl(ch) && ch != '\n')
+                throw new OntologyCanonicalException(
+                    $"Prohibited control character U+{(int)ch:X4} in {fieldName}.");
+        }
+        return nfc;
+    }
 }
 
 /// <summary>

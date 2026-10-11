@@ -66,7 +66,7 @@ public static class OntologyCanonicalJson
                 switch (value.GetValueKind())
                 {
                     case JsonValueKind.String:
-                        writer.WriteStringValue(OntologyCanonical.Normalize(value.GetValue<string>(), "value"));
+                        writer.WriteStringValue(OntologyCanonical.NormalizeMultiline(value.GetValue<string>(), "value"));
                         break;
                     default:
                         value.WriteTo(writer);

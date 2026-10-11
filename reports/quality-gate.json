@@ -1,0 +1,265 @@
+﻿{
+    "schemaVersion":  "lr-quality-gate/1.0.0",
+    "asOf":  "2026-10-11",
+    "batch":  "finalize",
+    "status":  "failed",
+    "allRequirementsCompleteClaimed":  false,
+    "note":  "Known skipped tests fail the requested no-skips gate; see each test output and contract-compliance limitations.",
+    "missingChecks":  [
+
+                      ],
+    "results":  [
+                    {
+                        "name":  "Core build",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe build F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Core\\LambdaRag.Core.csproj --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Build succeeded.",
+                        "outputTail":  [
+                                           "  Determining projects to restore...",
+                                           "  All projects are up-to-date for restore.",
+                                           "  LambdaRag.Core -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Core\\bin\\Debug\\net9.0\\LambdaRag.Core.dll",
+                                           "",
+                                           "Build succeeded.",
+                                           "    0 Warning(s)",
+                                           "    0 Error(s)",
+                                           "",
+                                           "Time Elapsed 00:00:01.04"
+                                       ]
+                    },
+                    {
+                        "name":  "CLI build",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe build F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Cli\\LambdaRag.Cli.csproj --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Build succeeded.",
+                        "outputTail":  [
+                                           "  LambdaRag.Evaluation -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Evaluation\\bin\\Debug\\net9.0\\LambdaRag.Evaluation.dll",
+                                           "  LambdaRag.Authoring -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Authoring\\bin\\Debug\\net9.0\\LambdaRag.Authoring.dll",
+                                           "  LambdaRag.Indexing -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Indexing\\bin\\Debug\\net9.0\\LambdaRag.Indexing.dll",
+                                           "  LambdaRag.Cli -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Cli\\bin\\Debug\\net9.0\\lambda-rag.dll",
+                                           "",
+                                           "Build succeeded.",
+                                           "    0 Warning(s)",
+                                           "    0 Error(s)",
+                                           "",
+                                           "Time Elapsed 00:00:01.30"
+                                       ]
+                    },
+                    {
+                        "name":  "API build",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe build F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Api\\LambdaRag.Api.csproj --no-restore --nologo -p:OutputPath=C:\\Users\\codec\\AppData\\Local\\Temp\\lambda-rag-quality-gate-api\\",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Build succeeded.",
+                        "outputTail":  [
+                                           "  LambdaRag.Evaluation -\u003e C:\\Users\\codec\\AppData\\Local\\Temp\\lambda-rag-quality-gate-api\\LambdaRag.Evaluation.dll",
+                                           "  LambdaRag.Authoring -\u003e C:\\Users\\codec\\AppData\\Local\\Temp\\lambda-rag-quality-gate-api\\LambdaRag.Authoring.dll",
+                                           "  LambdaRag.Cli -\u003e C:\\Users\\codec\\AppData\\Local\\Temp\\lambda-rag-quality-gate-api\\lambda-rag.dll",
+                                           "  LambdaRag.Api -\u003e C:\\Users\\codec\\AppData\\Local\\Temp\\lambda-rag-quality-gate-api\\LambdaRag.Api.dll",
+                                           "",
+                                           "Build succeeded.",
+                                           "    0 Warning(s)",
+                                           "    0 Error(s)",
+                                           "",
+                                           "Time Elapsed 00:00:02.68"
+                                       ]
+                    },
+                    {
+                        "name":  "C# formatting",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe format whitespace F:\\Projects\\axiomiq\\lambda-rag\\LambdaRag.sln --verify-no-changes --no-restore --include src/LambdaRag.Core/Ontology src/LambdaRag.Cli/OntologyCommand.cs src/LambdaRag.Projection/AcceptedOntologyTopicMapAdapter.cs src/LambdaRag.Api/Program.cs tests/LambdaRag.UnitTests/Ontology tests/LambdaRag.UnitTests/Projection/AcceptedOntologyTopicMapAdapterTests.cs",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "",
+                        "outputTail":  [
+
+                                       ]
+                    },
+                    {
+                        "name":  "Full unit tests",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\LambdaRag.UnitTests.csproj --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:   963, Skipped:     0, Total:   963, Duration: 5 s - LambdaRag.UnitTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "  LambdaRag.Indexing -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Indexing\\bin\\Debug\\net9.0\\LambdaRag.Indexing.dll",
+                                           "  LambdaRag.Projection -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Projection\\bin\\Debug\\net9.0\\LambdaRag.Projection.dll",
+                                           "  LambdaRag.Evaluation -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Evaluation\\bin\\Debug\\net9.0\\LambdaRag.Evaluation.dll",
+                                           "  LambdaRag.Authoring -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Authoring\\bin\\Debug\\net9.0\\LambdaRag.Authoring.dll",
+                                           "  LambdaRag.Cli -\u003e F:\\Projects\\axiomiq\\lambda-rag\\src\\LambdaRag.Cli\\bin\\Debug\\net9.0\\lambda-rag.dll",
+                                           "  LambdaRag.UnitTests -\u003e F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\bin\\Debug\\net9.0\\LambdaRag.UnitTests.dll",
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\bin\\Debug\\net9.0\\LambdaRag.UnitTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:   963, Skipped:     0, Total:   963, Duration: 5 s - LambdaRag.UnitTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Ontology contract tests",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\LambdaRag.UnitTests.csproj --no-build --no-restore --filter FullyQualifiedName~Ontology --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:   110, Skipped:     0, Total:   110, Duration: 392 ms - LambdaRag.UnitTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\bin\\Debug\\net9.0\\LambdaRag.UnitTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:   110, Skipped:     0, Total:   110, Duration: 392 ms - LambdaRag.UnitTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "DOCX acceptance test",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\LambdaRag.UnitTests.csproj --no-build --no-restore --filter FullyQualifiedName~CloudServiceArchitectureAcceptanceTests --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 398 ms - LambdaRag.UnitTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.UnitTests\\bin\\Debug\\net9.0\\LambdaRag.UnitTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 398 ms - LambdaRag.UnitTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Ontology benchmark",
+                        "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File F:\\Projects\\axiomiq\\lambda-rag\\scripts\\ontology_benchmark.ps1 -RepositoryRoot F:\\Projects\\axiomiq\\lambda-rag",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Scenarios: 10",
+                        "outputTail":  [
+                                           "Benchmark scenario: formattingOnly",
+                                           "Benchmark scenario: paraphrase",
+                                           "Benchmark scenario: localClauseAddition",
+                                           "Benchmark scenario: localClauseRemoval",
+                                           "Benchmark scenario: terminologySubstitution",
+                                           "Benchmark scenario: contradictoryClause",
+                                           "Benchmark scenario: unrelatedSameDomain",
+                                           "Benchmark scenario: differentDomain",
+                                           "Benchmark report: F:\\Projects\\axiomiq\\lambda-rag\\artifacts\\benchmark\\ontology-benchmark.json",
+                                           "Scenarios: 10"
+                                       ]
+                    },
+                    {
+                        "name":  "Contract audit",
+                        "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File F:\\Projects\\axiomiq\\lambda-rag\\tools\\contract_auditor\\audit.ps1 -RepositoryRoot F:\\Projects\\axiomiq\\lambda-rag",
+                        "exitCode":  0,
+                        "status":  "in-progress",
+                        "summary":  "Audit status: in-progress",
+                        "outputTail":  [
+                                           "Audit status: in-progress",
+                                           "Report: F:\\Projects\\axiomiq\\lambda-rag\\reports\\contract-compliance-report.md",
+                                           "JSON: F:\\Projects\\axiomiq\\lambda-rag\\reports\\contract-compliance.json"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency accuracy",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~AccuracyHarness --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:    17, Skipped:     0, Total:    17, Duration: 6 s - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:    17, Skipped:     0, Total:    17, Duration: 6 s - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency corpus",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~CorpusRegression --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:    17, Skipped:     0, Total:    17, Duration: 6 s - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:    17, Skipped:     0, Total:    17, Duration: 6 s - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency runtime",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~RuntimeDeterminismGuardrails --nologo",
+                        "exitCode":  0,
+                        "status":  "skipped",
+                        "summary":  "Passed!  - Failed:     0, Passed:    25, Skipped:     1, Total:    26, Duration: 10 s - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "[xUnit.net 00:00:10.72]     LambdaRag.IdempotencyTests.RuntimeDeterminismGuardrails.Snapshot_pull_is_byte_identical_across_runs [SKIP]",
+                                           "  Skipped LambdaRag.IdempotencyTests.RuntimeDeterminismGuardrails.Snapshot_pull_is_byte_identical_across_runs [1 ms]",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:    25, Skipped:     1, Total:    26, Duration: 10 s - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency ARB benchmark",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~ArbPsaBenchmark\u0026FullyQualifiedName!~Benchmark_matches_committed_golden_master --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 7 ms - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:     4, Skipped:     0, Total:     4, Duration: 7 ms - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency non-DOCX miscellaneous",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~AdditiveGuaranteeTests|FullyQualifiedName~ArbPsaDiagnostics|FullyQualifiedName~DomainMismatchGuardrailTests --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:     8, Skipped:     0, Total:     8, Duration: 3 m 30 s - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:     8, Skipped:     0, Total:     8, Duration: 3 m 30 s - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency reviewed DOCX",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~ReviewedDocxIdempotency --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2, Duration: 2 s - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2, Duration: 2 s - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Idempotency review pipeline",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~ReviewPipelineIdempotency --nologo",
+                        "exitCode":  0,
+                        "status":  "passed",
+                        "summary":  "Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2, Duration: 1 s - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "",
+                                           "Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2, Duration: 1 s - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    },
+                    {
+                        "name":  "Known skipped tests",
+                        "command":  "C:\\Program Files\\dotnet\\dotnet.exe test F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\LambdaRag.IdempotencyTests.csproj --no-build --no-restore --filter FullyQualifiedName~Benchmark_matches_committed_golden_master|FullyQualifiedName~Snapshot_pull_is_byte_identical_across_runs --nologo",
+                        "exitCode":  0,
+                        "status":  "skipped",
+                        "summary":  "Skipped! - Failed:     0, Passed:     0, Skipped:     2, Total:     2, Duration: 2 ms - LambdaRag.IdempotencyTests.dll (net9.0)",
+                        "outputTail":  [
+                                           "Test run for F:\\Projects\\axiomiq\\lambda-rag\\tests\\LambdaRag.IdempotencyTests\\bin\\Debug\\net9.0\\LambdaRag.IdempotencyTests.dll (.NETCoreApp,Version=v9.0)",
+                                           "A total of 1 test files matched the specified pattern.",
+                                           "[xUnit.net 00:00:00.12]     LambdaRag.IdempotencyTests.ArbPsaBenchmark.Benchmark_matches_committed_golden_master [SKIP]",
+                                           "[xUnit.net 00:00:00.12]     LambdaRag.IdempotencyTests.RuntimeDeterminismGuardrails.Snapshot_pull_is_byte_identical_across_runs [SKIP]",
+                                           "  Skipped LambdaRag.IdempotencyTests.ArbPsaBenchmark.Benchmark_matches_committed_golden_master [1 ms]",
+                                           "  Skipped LambdaRag.IdempotencyTests.RuntimeDeterminismGuardrails.Snapshot_pull_is_byte_identical_across_runs [1 ms]",
+                                           "",
+                                           "Skipped! - Failed:     0, Passed:     0, Skipped:     2, Total:     2, Duration: 2 ms - LambdaRag.IdempotencyTests.dll (net9.0)"
+                                       ]
+                    }
+                ]
+}
