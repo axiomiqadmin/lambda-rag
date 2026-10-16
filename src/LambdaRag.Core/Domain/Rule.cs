@@ -328,7 +328,7 @@ public sealed record RuleSet(
     /// <summary>
     /// Pillar 3 (#118) — the embedder id the rule's
     /// <see cref="Rule.SourceEmbedding"/> vectors were produced with
-    /// (e.g. <c>azure-openai:text-embedding-3-large@2025-04</c>). When
+    /// (e.g. <c>openrouter:openai/text-embedding-3-large/3072</c>). When
     /// non-null and the runtime <c>ISemanticVectorStore.ModelId</c>
     /// disagrees, evaluation throws — drifted embedding models can never
     /// silently pass. Folded into <see cref="Fingerprint"/> only when set.

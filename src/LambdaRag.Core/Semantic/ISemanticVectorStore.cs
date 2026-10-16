@@ -21,7 +21,7 @@ public interface ISemanticVectorStore
 {
     /// <summary>
     /// The id of the embedding model the vectors in this store were produced
-    /// with (e.g. <c>azure-openai:text-embedding-3-large</c>). Stored on every
+    /// with (e.g. <c>openrouter:openai/text-embedding-3-large/3072</c>). Stored on every
     /// rule + projection artifact so audit can detect drift.
     /// </summary>
     string ModelId { get; }

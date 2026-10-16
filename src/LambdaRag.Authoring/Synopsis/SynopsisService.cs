@@ -10,7 +10,7 @@ namespace LambdaRag.Authoring.Synopsis;
 /// Authoring-time service that produces a one-sentence plain-English
 /// synopsis for a given <see cref="Rule"/> by reverse-engineering the
 /// rule's predicate / lambda / natural-language statement through a
-/// small chat model (e.g. gpt-4o-mini).
+/// OpenRouter chat model (openai/gpt-5.6-luna by default).
 ///
 /// **Determinism contract**
 ///
@@ -172,12 +172,7 @@ public sealed class SynopsisService
                 new ChatMessage(ChatRole.System, system),
                 new ChatMessage(ChatRole.User, user),
             },
-            new ChatOptions
-            {
-                Temperature = 0.0f,
-                Seed = 42,
-                MaxOutputTokens = 120,
-            },
+            new ChatOptions { MaxOutputTokens = 120 },
             cancellationToken: ct).ConfigureAwait(false);
 
         return resp.Text ?? string.Empty;

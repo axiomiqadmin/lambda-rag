@@ -9,11 +9,10 @@
     <NoWarn>$(NoWarn);OPENAI001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\LambdaRag.OpenRouter\LambdaRag.OpenRouter.csproj" />
     <ProjectReference Include="..\..\src\LambdaRag.Core\LambdaRag.Core.csproj" />
     <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" />
-    <PackageReference Include="Azure.AI.OpenAI" />
-    <PackageReference Include="Azure.Identity" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />

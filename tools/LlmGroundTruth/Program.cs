@@ -2,10 +2,9 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Azure.AI.OpenAI;
-using Azure.Identity;
 using LambdaRag.Core;
 using LambdaRag.Core.Domain;
+using LambdaRag.OpenRouter;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 
@@ -64,8 +63,7 @@ internal static class Program
         if (!dryRun && chat is null)
         {
             Console.Error.WriteLine(
-                "LambdaRag:Foundry:Edit:Endpoint and :Deployment must be configured " +
-                "(see ComplianceEditorFactory for the convention).");
+                "OPENROUTER_API_KEY must be configured to generate LLM judgments.");
             return 64;
         }
 
@@ -365,29 +363,11 @@ internal static class Program
 
     private static IChatClient? BuildChatClient(IConfiguration configuration)
     {
-        // Mirror ComplianceEditorFactory's convention: Edit:Endpoint +
-        // Edit:Deployment, Entra ID by default, API key when supplied.
-        var endpoint = configuration["LambdaRag:Foundry:Edit:Endpoint"]
-                       ?? Environment.GetEnvironmentVariable("LAMBDA_RAG_FOUNDRY_EDIT_ENDPOINT")
-                       ?? configuration["LambdaRag:Foundry:Embed:Endpoint"]
-                       ?? Environment.GetEnvironmentVariable("LAMBDA_RAG_FOUNDRY_ENDPOINT");
-        var deployment = configuration["LambdaRag:Foundry:Edit:Deployment"]
-                         ?? Environment.GetEnvironmentVariable("LAMBDA_RAG_FOUNDRY_EDIT_DEPLOYMENT");
-        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(deployment))
-            return null;
-
-        var apiKey = configuration["LambdaRag:Foundry:Edit:ApiKey"]
-                     ?? Environment.GetEnvironmentVariable("LAMBDA_RAG_FOUNDRY_EDIT_API_KEY");
-        var azure = string.IsNullOrWhiteSpace(apiKey)
-            ? new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
-            : new AzureOpenAIClient(new Uri(endpoint), new Azure.AzureKeyCredential(apiKey));
-        return azure.GetChatClient(deployment).AsIChatClient();
+        return OpenRouterChatClientFactory.TryCreate(configuration);
     }
 
     private static string ChatModelHint(IConfiguration configuration)
-        => configuration["LambdaRag:Foundry:Edit:Deployment"]
-           ?? Environment.GetEnvironmentVariable("LAMBDA_RAG_FOUNDRY_EDIT_DEPLOYMENT")
-           ?? "unknown";
+        => OpenRouterChatClientFactory.ResolveModel(configuration);
 
     // ── ruleset load ───────────────────────────────────────────────────
 

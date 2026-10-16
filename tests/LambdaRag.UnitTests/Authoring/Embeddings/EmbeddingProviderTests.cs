@@ -67,7 +67,7 @@ public class FileBackedEmbeddingCacheTests
     }
 }
 
-public class AzureFoundryEmbeddingProviderTests
+public class OpenRouterEmbeddingProviderTests
 {
     [Fact]
     public async Task Cache_hit_skips_underlying_generator()
@@ -77,7 +77,7 @@ public class AzureFoundryEmbeddingProviderTests
         var cache = new FileBackedEmbeddingCache(cacheDir, "test-model", 2);
         cache.Write("seeded", new float[] { 0.5f, 0.5f });
 
-        var provider = new AzureFoundryEmbeddingProvider(generator, "test-model", 2, cache);
+        var provider = new OpenRouterEmbeddingProvider(generator, "test-model", 2, cache);
 
         var v = await provider.EmbedAsync("seeded");
         v.Should().Equal(new[] { 0.5f, 0.5f });
@@ -90,7 +90,7 @@ public class AzureFoundryEmbeddingProviderTests
         var generator = new RecordingEmbeddingGenerator(new float[] { 3f, 4f });
         var cacheDir = Path.Combine(Path.GetTempPath(), "lambdarag-prov-tests", Guid.NewGuid().ToString("N"));
         var cache = new FileBackedEmbeddingCache(cacheDir, "test-model", 2);
-        var provider = new AzureFoundryEmbeddingProvider(generator, "test-model", 2, cache);
+        var provider = new OpenRouterEmbeddingProvider(generator, "test-model", 2, cache);
 
         var v = await provider.EmbedAsync("first");
         v.Should().HaveCount(2);
@@ -109,7 +109,7 @@ public class AzureFoundryEmbeddingProviderTests
     public async Task Generator_dimension_mismatch_throws()
     {
         var generator = new RecordingEmbeddingGenerator(new float[] { 1f, 2f, 3f });
-        var provider = new AzureFoundryEmbeddingProvider(generator, "m", dimensions: 2);
+        var provider = new OpenRouterEmbeddingProvider(generator, "m", dimensions: 2);
         var act = () => provider.EmbedAsync("x");
         await act.Should().ThrowAsync<InvalidOperationException>();
     }

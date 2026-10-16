@@ -15,7 +15,7 @@ namespace LambdaRag.UnitTests.Authoring.Embeddings;
 ///     identical vectors and an identical key set;
 ///   • once vectors are cached, a replay reading them from
 ///     <see cref="FileBackedEmbeddingCache"/> through
-///     <see cref="AzureFoundryEmbeddingProvider"/> issues *zero* calls to
+///     <see cref="OpenRouterEmbeddingProvider"/> issues *zero* calls to
 ///     the underlying generator (CallCount == 0). This is what makes CI
 ///     runs offline and ensures verdict reproducibility from snapshot.
 /// </summary>
@@ -57,7 +57,7 @@ public class RuleSetEmbedderOfflineReplayTests
             // Warm pass: a recording generator returns a fixed vector and the
             // provider persists it through the cache.
             var warmGenerator = new RecordingEmbeddingGenerator(new float[] { 3f, 4f });
-            var warmProvider = new AzureFoundryEmbeddingProvider(warmGenerator, modelId, dimensions: 2, cache);
+            var warmProvider = new OpenRouterEmbeddingProvider(warmGenerator, modelId, dimensions: 2, cache);
             _ = await warmProvider.EmbedAsync("provider shall maintain ISO 27001 controls");
             _ = await warmProvider.EmbedAsync("works made for hire");
             warmGenerator.CallCount.Should().Be(2, "warm pass must call the generator once per unique text");
@@ -66,7 +66,7 @@ public class RuleSetEmbedderOfflineReplayTests
             // the same on-disk cache. No calls expected — every read should
             // hit the persisted vector.
             var replayGenerator = new RecordingEmbeddingGenerator(new float[] { 99f, 99f });
-            var replayProvider = new AzureFoundryEmbeddingProvider(replayGenerator, modelId, dimensions: 2, cache);
+            var replayProvider = new OpenRouterEmbeddingProvider(replayGenerator, modelId, dimensions: 2, cache);
             var v1 = await replayProvider.EmbedAsync("provider shall maintain ISO 27001 controls");
             var v2 = await replayProvider.EmbedAsync("works made for hire");
             replayGenerator.CallCount.Should().Be(0, "replay must be served entirely from the cache");

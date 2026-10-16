@@ -8,18 +8,13 @@ var configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 
-var endpoint = configuration[FoundryEmbedderFactory.EndpointKey]
-    ?? Environment.GetEnvironmentVariable(FoundryEmbedderFactory.EndpointVar);
-if (string.IsNullOrEmpty(endpoint))
+var embedder = OpenRouterEmbedderFactory.TryCreate(configuration);
+if (embedder is null)
 {
     Console.Error.WriteLine(
-        "Set Foundry endpoint first. Either:\n" +
-        "  dotnet user-secrets --project src/LambdaRag.Cli set \"LambdaRag:Foundry:Endpoint\" \"https://...\"\n" +
-        "  (or) set LAMBDA_RAG_FOUNDRY_ENDPOINT");
+        "Set OPENROUTER_API_KEY in the environment or OpenRouter:ApiKey in configuration.");
     return 1;
 }
-var embedder = FoundryEmbedderFactory.TryCreate(configuration)
-    ?? throw new InvalidOperationException("Foundry settings missing (endpoint + deployment).");
 
 var ruleNl = "Deliverables must vest in Contoso as works made for hire (or be irrevocably assigned).";
 var concepts = new[]

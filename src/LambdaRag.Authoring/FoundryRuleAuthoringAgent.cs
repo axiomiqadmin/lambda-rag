@@ -10,8 +10,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace LambdaRag.Authoring;
 
 /// <summary>
-/// LLM-backed <see cref="IRuleAuthoringAgent"/> that calls an Azure Foundry
-/// (Azure OpenAI) chat deployment through <see cref="IChatClient"/>. Emits
+/// LLM-backed <see cref="IRuleAuthoringAgent"/> that calls an OpenRouter
+/// chat model through <see cref="IChatClient"/>. Emits
 /// one rule per SHALL / MUST / SHALL NOT / MUST NOT clause found in the
 /// supplied chunk, with a strictly constrained predicate DSL so the runtime
 /// evaluation path stays 100% deterministic (no LLM at runtime).
@@ -224,7 +224,7 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             suggestions.Add(new RuleAuthoringSuggestion(
                 Rule: rule,
                 Confidence: 0.85,
-                Rationale: "Foundry-backed extraction, schema+DSL-validated."));
+                Rationale: "OpenRouter-backed extraction, schema+DSL-validated."));
         }
 
         // Stable order so callers get deterministic output for a given chunk.

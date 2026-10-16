@@ -17,7 +17,7 @@ namespace LambdaRag.Authoring.Embeddings;
 ///
 /// Determinism contract:
 ///   • The underlying <see cref="IRuleEmbedder"/> is itself deterministic
-///     (e.g. <see cref="AzureFoundryEmbeddingProvider"/> L2-normalises every
+///     (e.g. <see cref="OpenRouterEmbeddingProvider"/> L2-normalises every
 ///     vector and writes it through a hash-keyed <see cref="FileBackedEmbeddingCache"/>).
 ///   • Two runs hitting the same JIT path against the same model + text
 ///     therefore produce byte-identical vectors.

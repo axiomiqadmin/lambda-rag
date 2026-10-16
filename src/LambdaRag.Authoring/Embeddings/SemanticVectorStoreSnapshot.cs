@@ -14,7 +14,7 @@ namespace LambdaRag.Authoring.Embeddings;
 /// JSON layout:
 /// <code>
 /// {
-///   "modelId": "azure-foundry:text-embedding-3-large/3072",
+///   "modelId": "openrouter:openai/text-embedding-3-large/3072",
 ///   "dimensions": 3072,
 ///   "sections": { "s_00000003": "&lt;sha256-hex&gt;", ... },
 ///   "concepts": { "works made for hire": "&lt;sha256-hex&gt;", ... }

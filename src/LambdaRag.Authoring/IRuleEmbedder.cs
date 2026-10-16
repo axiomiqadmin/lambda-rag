@@ -6,7 +6,7 @@ namespace LambdaRag.Authoring;
 
 /// <summary>
 /// Computes a dense embedding for a piece of text. Implementations may use
-/// a real embedding model (Azure OpenAI text-embedding-3-large, etc.) or
+/// a real embedding model (OpenRouter openai/text-embedding-3-large, etc.) or
 /// a deterministic hash-based fake for unit tests.
 ///
 /// All implementations must be:

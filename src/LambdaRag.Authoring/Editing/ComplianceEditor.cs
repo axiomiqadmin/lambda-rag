@@ -8,16 +8,15 @@ using Microsoft.Agents.AI;
 namespace LambdaRag.Authoring.Editing;
 
 /// <summary>
-/// Compliance-focused clause re-author backed by a Microsoft Foundry v2
-/// endpoint **Prompt agent on the Responses API** (Microsoft Agent
-/// Framework v2). The agent is constructed via:
+/// Compliance-focused clause re-author backed by an OpenRouter chat client
+/// wrapped as a Microsoft Agent Framework v2 <see cref="AIAgent"/>. The agent
+/// is constructed via:
 ///
 /// <code>
-/// var responseClient = azureOpenAI.GetOpenAIResponseClient(deployment);
-/// var agent = responseClient.CreateAIAgent(instructions, name: "ComplianceEditor");
+/// var agent = chatClient.AsAIAgent(instructions, name: "ComplianceEditor");
 /// </code>
 ///
-/// — not a Persistent Agent — so each rewrite is a stateless one-shot
+/// Each rewrite is a stateless one-shot
 /// turn. Determinism is enforced via a SHA-256 disk cache and strict
 /// normalization on the model response.
 ///

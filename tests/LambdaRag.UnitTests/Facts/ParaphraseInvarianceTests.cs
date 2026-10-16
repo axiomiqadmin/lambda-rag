@@ -330,8 +330,7 @@ public class ParaphraseInvarianceTests
         // would:
         //   1. Build a FoundrySectionFactExtractor from an
         //      IChatClient that resolves to a live gpt-5.3-chat-1
-        //      deployment (env: LAMBDA_RAG_FOUNDRY_ENDPOINT,
-        //      LAMBDA_RAG_FOUNDRY_KEY, LAMBDA_RAG_FOUNDRY_DEPLOYMENT).
+        //      deployment (env: OPENROUTER_API_KEY and OPENROUTER_MODEL).
         //   2. For each ConceptGroup, synthesize a one-section
         //      ProjectedDocument per paraphrase.
         //   3. Assert the extracted fact bag reports the expected value

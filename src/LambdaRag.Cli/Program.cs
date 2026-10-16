@@ -309,7 +309,7 @@ static class CliEntry
 #pragma warning restore OPENAI001
             if (factExtractor is null)
             {
-                AnsiConsole.MarkupLine("[red]Facts:[/]     ruleset has factSchema but Foundry Edit endpoint is not configured (LAMBDA_RAG_FOUNDRY_EDIT_ENDPOINT/DEPLOYMENT). Fact-mode rules will Error.");
+                AnsiConsole.MarkupLine("[red]Facts:[/]     ruleset has factSchema but OPENROUTER_API_KEY is not configured. Fact-mode rules will Error.");
             }
             else
             {
@@ -421,17 +421,15 @@ static class CliEntry
                     if (rewriter is NoopClauseRewriter)
                     {
                         rewriteUnavailableReason =
-                            "No LLM editor agent is configured. Set LAMBDA_RAG_FOUNDRY_EDIT_ENDPOINT, "
-                          + "LAMBDA_RAG_FOUNDRY_EDIT_DEPLOYMENT, and LAMBDA_RAG_FOUNDRY_EDIT_API_KEY "
-                          + "(or the matching LambdaRag:Foundry:Edit:* config keys) to enable the "
+                                                        "No LLM editor agent is configured. Set OPENROUTER_API_KEY "
+                                                    + "(or OpenRouter:ApiKey config) to enable the "
                           + "ComplianceEditor agent. Tracked-change replacements were not emitted; "
                           + "fail verdicts appear as comments only.";
                         Console.WriteLine(
                             "Rewrite:   --rewrite requested but no LLM editor agent is configured. "
                           + "No tracked-change replacements will be emitted; fail verdicts will appear as comments only.");
                         Console.WriteLine(
-                            "           Set LAMBDA_RAG_FOUNDRY_EDIT_ENDPOINT, LAMBDA_RAG_FOUNDRY_EDIT_DEPLOYMENT, "
-                          + "and LAMBDA_RAG_FOUNDRY_EDIT_API_KEY (or the matching LambdaRag:Foundry:Edit:* config keys) "
+                                                        "           Set OPENROUTER_API_KEY (or OpenRouter:ApiKey config) "
                           + "to enable the ComplianceEditor agent.");
                     }
                     annotations = new List<Annotation>();
@@ -941,7 +939,7 @@ static class CliEntry
         Console.WriteLine($"Embedder:  {embedder.EmbedderId} (dims={embedder.Dimensions})");
         if (embedder is DeterministicHashEmbedder)
         {
-            Console.Error.WriteLine("warning: deterministic-hash embedder selected — set LambdaRag:Foundry:Embed:* secrets for real semantic vectors.");
+            Console.Error.WriteLine("warning: deterministic-hash embedder selected — set OPENROUTER_API_KEY for real semantic vectors.");
         }
 
         var ruleset = RuleSetIO.Load(inPath);
@@ -1057,8 +1055,8 @@ static class CliEntry
         }
         else
         {
-            var foundry = FoundryEmbedderFactory.TryCreate(BuildConfiguration());
-            embedder = foundry is null ? new DeterministicHashEmbedder() : foundry;
+            var openRouter = OpenRouterEmbedderFactory.TryCreate(BuildConfiguration());
+            embedder = openRouter is null ? new DeterministicHashEmbedder() : openRouter;
         }
         Console.WriteLine($"Validating {rulesetPath} with embedder={embedder.EmbedderId} epsilon={epsilon:F4} ...");
 

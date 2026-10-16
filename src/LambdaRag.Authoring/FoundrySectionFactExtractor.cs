@@ -12,8 +12,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace LambdaRag.Authoring;
 
 /// <summary>
-/// Pillar 12 (#153) — LLM-backed <see cref="IFactExtractor"/> that calls a
-/// Foundry chat deployment (same wiring as
+/// Pillar 12 (#153) — LLM-backed <see cref="IFactExtractor"/> that calls an
+/// OpenRouter chat model (same wiring as
 /// <see cref="FoundryRuleAuthoringAgent"/>) once per section to populate a
 /// closed <see cref="FactSchema"/>.
 ///
@@ -36,30 +36,34 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
 {
     public const string SidecarVersion = "1.0";
     // Bumping this string invalidates every cached sidecar loudly.
-    public const string PromptVersion = "1.0.0";
+    public const string PromptVersion = "1.1.0";
 
     private static readonly SemaphoreSlim GlobalCallGate = new(initialCount: 4, maxCount: 4);
 
     public const string SystemPrompt = """
-        You are a policy-fact extractor. Your job is to read one section of a
-        document and populate a fixed JSON schema of concepts. You do NOT decide
-        compliance, adequacy, or applicability. You ONLY report what the section
-        discusses.
+        You are a policy-fact extractor. Read one section and populate the
+        supplied fixed JSON schema using evidence from that section only. You
+        do NOT decide compliance, adequacy, or applicability.
 
         Rules:
         1. Emit ONLY a JSON object matching the schema below. No prose, no
            markdown, no code fences.
-        2. For each concept, emit either the value the section supports
-           (boolean, enum, integer, or verbatim phrase), OR null if the
-           section does not discuss the concept.
-        3. Never infer a value across sections. If the section is silent on
+          2. Emit a non-null value only when the section explicitly states or
+              unambiguously describes the declared concept. Do not infer support
+              from implication, general context, or a different concept.
+          3. For a boolean concept, emit false only when the section explicitly
+              negates that concept. If it is silent, ambiguous, or only implies
+              the concept, emit null; null does not mean false.
+          4. Never infer a value across sections. If the section is silent on
            a concept, emit null. Cross-section composition happens elsewhere.
-        4. For every non-null value, emit "supporting_quote" — a verbatim
+          5. For every non-null value, emit "supporting_quote" — a byte-for-byte
            quote from the section (max 200 characters) that supports it.
-        5. If the section contains a number/date/duration, emit the VERBATIM
+          6. If the section contains a number/date/duration, emit the VERBATIM
            phrase from the text ("every 90 days", "quarterly"). Do NOT convert.
-        6. If you are less than confident a concept applies, emit null. Silent
-           is safer than wrong.
+          7. For integer and text concepts, extract only a literal value stated
+              in the section; do not invent or normalize it. If no supported
+              value is present, emit null.
+          8. If evidence is uncertain, emit null. Silent is safer than wrong.
         """;
 
     private readonly IChatClient _chat;
@@ -118,9 +122,14 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
         if (!_refresh && File.Exists(path))
         {
             var cached = SectionFactSidecarIO.LoadOrThrow(path, expectedFp);
-            _log.LogInformation("Loaded cached fact sidecar ({Sections} sections) from {Path}",
-                cached.Sections.Count, path);
-            return cached;
+            if (!cached.Sections.Values.Any(section => section.ContainsKey("_extraction_failed")))
+            {
+                _log.LogInformation("Loaded cached fact sidecar ({Sections} sections) from {Path}",
+                    cached.Sections.Count, path);
+                return cached;
+            }
+
+            _log.LogInformation("Cached fact sidecar contains extraction failures; retrying extraction from source.");
         }
 
         _log.LogInformation("Extracting facts for {Sections} sections via model {Model}",
@@ -406,16 +415,74 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) when (attempt <= _maxRetries && FoundryRuleAuthoringAgent.IsTransient(ex))
             {
-                var baseMs = 250 * (1 << attempt);
-                var jitter = Random.Shared.Next(0, 250);
+                var delay = ComputeRetryDelay(ex, attempt);
                 _log.LogInformation("Transient fact-extract failure (attempt {A}/{M}), backing off {B}ms: {E}",
-                    attempt, _maxRetries, baseMs + jitter, ex.Message);
-                await Task.Delay(baseMs + jitter, ct).ConfigureAwait(false);
+                    attempt, _maxRetries, (long)delay.TotalMilliseconds, ex.Message);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
             finally
             {
                 GlobalCallGate.Release();
             }
         }
+    }
+
+    private static TimeSpan ComputeRetryDelay(Exception exception, int attempt)
+    {
+        var response = exception.GetType().GetMethod("GetRawResponse", Type.EmptyTypes)?.Invoke(exception, null);
+        var headers = response?.GetType().GetProperty("Headers")?.GetValue(response);
+        if (headers is not null)
+        {
+            var tryGetValue = headers.GetType().GetMethods()
+                .FirstOrDefault(method => method.Name == "TryGetValue"
+                    && method.GetParameters() is [{ ParameterType: var keyType }, { IsOut: true }]
+                    && keyType == typeof(string));
+            if (tryGetValue is not null)
+            {
+                foreach (var header in new[] { "Retry-After-ms", "Retry-After" })
+                {
+                    var arguments = new object?[] { header, null };
+                    if (tryGetValue.Invoke(headers, arguments) is true
+                        && TryParseRetryAfter(header, arguments[1]?.ToString(), out var retryAfter)
+                        && retryAfter > TimeSpan.Zero)
+                        return retryAfter;
+                }
+            }
+        }
+
+        var exponent = Math.Clamp(attempt - 1, 0, 5);
+        var baseMs = Math.Min(30_000, 1_000 * (1 << exponent));
+        var jitter = Random.Shared.Next(0, Math.Max(1, baseMs / 2));
+        return TimeSpan.FromMilliseconds(baseMs + jitter);
+    }
+
+    private static bool TryParseRetryAfter(string header, string? value, out TimeSpan delay)
+    {
+        delay = TimeSpan.Zero;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        if (header.Equals("Retry-After-ms", StringComparison.OrdinalIgnoreCase)
+            && double.TryParse(value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
+        {
+            delay = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+            return true;
+        }
+
+        if (double.TryParse(value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var seconds))
+        {
+            delay = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            return true;
+        }
+
+        if (DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var retryAt))
+        {
+            delay = retryAt - DateTimeOffset.UtcNow;
+            return true;
+        }
+
+        return false;
     }
 }

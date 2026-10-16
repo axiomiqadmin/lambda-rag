@@ -1,15 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Azure.AI.OpenAI;
-using Azure.Identity;
 using Json.Schema;
+using LambdaRag.OpenRouter;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace LambdaRag.Authoring.ExtractFunction;
 
 /// <summary>
-/// Calls Azure OpenAI (Foundry) chat completions with the packaged
+/// Calls OpenRouter chat completions with the packaged
 /// rule-extraction system prompt and validates the response against the
 /// packaged ExtractedRule JSON schema.
 ///
@@ -28,11 +27,6 @@ public sealed class RuleExtractionService
     {
         _log = log;
 
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
-            ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT is required");
-        var deployment = Environment.GetEnvironmentVariable("AZURE_OPENAI_CHAT_DEPLOYMENT")
-            ?? "gpt-4o-mini";
-
         var promptDir = Path.Combine(AppContext.BaseDirectory, "prompts");
         var promptPath = Path.Combine(promptDir, "rule-extraction.system-prompt.md");
         var schemaPath = Path.Combine(promptDir, "rule-extraction.schema.json");
@@ -45,13 +39,12 @@ public sealed class RuleExtractionService
         _systemPrompt = File.ReadAllText(promptPath);
         _schema = JsonSchema.FromText(File.ReadAllText(schemaPath));
 
-        _chat = new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
-            .GetChatClient(deployment)
-            .AsIChatClient();
+        _chat = OpenRouterChatClientFactory.TryCreate()
+            ?? throw new InvalidOperationException("OPENROUTER_API_KEY is required");
 
         _log.LogInformation(
-            "RuleExtractionService ready. endpoint={Endpoint} deployment={Deployment} promptBytes={Bytes}",
-            endpoint, deployment, _systemPrompt.Length);
+            "RuleExtractionService ready. provider=OpenRouter model={Model} promptBytes={Bytes}",
+            OpenRouterChatClientFactory.ResolveModel(), _systemPrompt.Length);
     }
 
     public async Task<ExtractionOutcome> ExtractAsync(
@@ -97,7 +90,6 @@ public sealed class RuleExtractionService
                 new ChatOptions
                 {
                     ResponseFormat = ChatResponseFormat.Json,
-                    Temperature = 0,
                 },
                 cancellationToken: ct);
 

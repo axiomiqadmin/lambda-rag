@@ -5,8 +5,7 @@ namespace LambdaRag.Authoring.Embeddings;
 /// <summary>
 /// Production embedding provider that delegates to any
 /// <c>Microsoft.Extensions.AI.IEmbeddingGenerator&lt;string, Embedding&lt;float&gt;&gt;</c>.
-/// Pair this with a builder that wires up Azure OpenAI / Azure Foundry
-/// (e.g. <c>new AzureOpenAIClient(endpoint, credential).GetEmbeddingClient(deployment).AsIEmbeddingGenerator()</c>).
+/// Pair this with the OpenRouter embedding client for a pinned model.
 ///
 /// Determinism contract:
 /// • Every embedding result is L2-normalised before persisting / returning,
@@ -19,12 +18,12 @@ namespace LambdaRag.Authoring.Embeddings;
 /// • <see cref="EmbedderId"/> includes the pinned model identifier so
 ///   audit can detect drift between authoring time and runtime.
 /// </summary>
-public sealed class AzureFoundryEmbeddingProvider : IRuleEmbedder
+public sealed class OpenRouterEmbeddingProvider : IRuleEmbedder
 {
     private readonly IEmbeddingGenerator<string, Embedding<float>> _generator;
     private readonly FileBackedEmbeddingCache? _cache;
 
-    public AzureFoundryEmbeddingProvider(
+    public OpenRouterEmbeddingProvider(
         IEmbeddingGenerator<string, Embedding<float>> generator,
         string modelId,
         int dimensions,
@@ -35,7 +34,7 @@ public sealed class AzureFoundryEmbeddingProvider : IRuleEmbedder
         if (dimensions <= 0) throw new ArgumentOutOfRangeException(nameof(dimensions));
         ModelId = modelId;
         Dimensions = dimensions;
-        EmbedderId = $"azure-foundry:{modelId}/{dimensions}";
+        EmbedderId = $"openrouter:{modelId}/{dimensions}";
         _cache = cache;
     }
 
