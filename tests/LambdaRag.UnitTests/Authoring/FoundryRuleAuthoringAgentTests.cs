@@ -75,7 +75,7 @@ public class FoundryRuleAuthoringAgentTests
         }
         """;
 
-        var agent = new FoundryRuleAuthoringAgent(new FakeChatClient(json), new DeterministicHashEmbedder());
+        var agent = CreateAgent(new FakeChatClient(json));
         var result = await agent.AuthorAsync(RequestWith(input));
 
         result.Should().HaveCount(3);
@@ -123,7 +123,7 @@ public class FoundryRuleAuthoringAgentTests
         }
         """;
 
-        var agent = new FoundryRuleAuthoringAgent(new FakeChatClient(json), new DeterministicHashEmbedder());
+        var agent = CreateAgent(new FakeChatClient(json));
         var result = await agent.AuthorAsync(RequestWith(input));
 
         result.Should().HaveCount(1);
@@ -153,7 +153,7 @@ public class FoundryRuleAuthoringAgentTests
         }
         """;
 
-        var agent = new FoundryRuleAuthoringAgent(new FakeChatClient(json), new DeterministicHashEmbedder());
+        var agent = CreateAgent(new FakeChatClient(json));
         var result = await agent.AuthorAsync(RequestWith(input));
 
         result.Should().BeEmpty();
@@ -165,7 +165,7 @@ public class FoundryRuleAuthoringAgentTests
     public async Task EmptyContent_returns_empty_without_calling_LLM()
     {
         var chat = new FakeChatClient("SHOULD NOT BE READ");
-        var agent = new FoundryRuleAuthoringAgent(chat, new DeterministicHashEmbedder());
+        var agent = CreateAgent(chat);
         var result = await agent.AuthorAsync(RequestWith(""));
 
         result.Should().BeEmpty();
@@ -177,7 +177,7 @@ public class FoundryRuleAuthoringAgentTests
     [Fact]
     public async Task MalformedJson_returns_empty_and_does_not_throw()
     {
-        var agent = new FoundryRuleAuthoringAgent(new FakeChatClient("not json at all {"), new DeterministicHashEmbedder());
+        var agent = CreateAgent(new FakeChatClient("not json at all {"));
         var result = await agent.AuthorAsync(RequestWith("Something SHALL happen."));
         result.Should().BeEmpty();
     }
@@ -185,7 +185,7 @@ public class FoundryRuleAuthoringAgentTests
     [Fact]
     public async Task EmptyRulesArray_returns_empty()
     {
-        var agent = new FoundryRuleAuthoringAgent(new FakeChatClient("""{"rules": []}"""), new DeterministicHashEmbedder());
+        var agent = CreateAgent(new FakeChatClient("""{"rules": []}"""));
         var result = await agent.AuthorAsync(RequestWith("Prose with no normative content."));
         result.Should().BeEmpty();
     }
@@ -202,11 +202,12 @@ public class FoundryRuleAuthoringAgentTests
         """;
         var chat = new FakeChatClient(new Queue<Func<string>>(new Func<string>[]
         {
-            () => throw new FakeThrottleException(429, "Too Many Requests"),
+          () => throw new FakeThrottleException(429, "Too Many Requests", retryAfterMs: "1"),
             () => throw new FakeThrottleException(503, "Service Unavailable"),
             () => good,
         }));
-        var agent = new FoundryRuleAuthoringAgent(chat, new DeterministicHashEmbedder(), log: null, maxRetries: 3);
+        var agent = new FoundryRuleAuthoringAgent(chat, new DeterministicHashEmbedder(), log: null,
+          maxRetries: 3, requestsPerMinute: 60_000);
         var result = await agent.AuthorAsync(RequestWith("Something SHALL be q done."));
 
         result.Should().HaveCount(1);
@@ -220,12 +221,26 @@ public class FoundryRuleAuthoringAgentTests
         {
             () => throw new InvalidOperationException("permanent 400 bad request"),
         }));
-        var agent = new FoundryRuleAuthoringAgent(chat, new DeterministicHashEmbedder(), log: null, maxRetries: 3);
+        var agent = CreateAgent(chat);
         var result = await agent.AuthorAsync(RequestWith("Something SHALL be done."));
 
         result.Should().BeEmpty();
         chat.Calls.Should().Be(1); // non-transient -> no retry
     }
+
+      [Fact]
+      public async Task ExhaustedTransientFailure_propagates_to_caller()
+      {
+        var chat = new FakeChatClient(new Queue<Func<string>>(new Func<string>[]
+        {
+          () => throw new FakeThrottleException(429, "Too Many Requests"),
+        }));
+        var agent = CreateAgent(chat, maxRetries: 0);
+
+        var act = () => agent.AuthorAsync(RequestWith("Something SHALL be done."));
+        await act.Should().ThrowAsync<FakeThrottleException>();
+        chat.Calls.Should().Be(1);
+      }
 
     // ============ meta-governance skipping is prompt-driven ============
     // The agent trusts the model to skip. We verify the prompt contains the
@@ -255,6 +270,9 @@ public class FoundryRuleAuthoringAgentTests
     }
 
     // ============ helpers ============
+
+    private static FoundryRuleAuthoringAgent CreateAgent(IChatClient chat, int maxRetries = 3)
+      => new(chat, new DeterministicHashEmbedder(), maxRetries: maxRetries, requestsPerMinute: 60_000);
 
     /// <summary>
     /// Minimal IChatClient stub. Either returns a fixed response every time,
@@ -302,6 +320,22 @@ public class FoundryRuleAuthoringAgentTests
     private sealed class FakeThrottleException : Exception
     {
         public int Status { get; }
-        public FakeThrottleException(int status, string message) : base(message) { Status = status; }
+      private readonly string? _retryAfterMs;
+
+      public FakeThrottleException(int status, string message, string? retryAfterMs = null) : base(message)
+      {
+        Status = status;
+        _retryAfterMs = retryAfterMs;
+      }
+
+      public FakeResponse GetRawResponse()
+      {
+        var headers = new Dictionary<string, string>();
+        if (_retryAfterMs is not null)
+          headers["Retry-After-ms"] = _retryAfterMs;
+        return new FakeResponse(headers);
+      }
     }
+
+    private sealed record FakeResponse(Dictionary<string, string> Headers);
 }

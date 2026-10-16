@@ -44,10 +44,10 @@ namespace LambdaRag.Authoring;
 ///   <item>Structured JSON output validated against a JSON schema server-side
 ///     AND revalidated locally. Bad entries are dropped, not thrown — one bad
 ///     rule can't kill an entire policy pass.</item>
-///   <item>Concurrency: pipeline-wide <see cref="SemaphoreSlim"/>(4) so a
-///     serial or parallel caller both stay under Foundry rate limits.</item>
+///   <item>Concurrency: pipeline-wide <see cref="SemaphoreSlim"/>(1) and a
+///     configurable request-rate limit keep calls within Foundry quotas.</item>
 ///   <item>Retry: transient failures (HTTP 408 / 429 / 5xx, network errors,
-///     timeouts) retried up to 3× with exponential backoff + jitter.</item>
+///     timeouts) retried up to 3×, honoring provider retry headers.</item>
 /// </list>
 ///
 /// <para>Rule ID scheme is intentionally partial. The agent emits a topic
@@ -65,9 +65,9 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
     /// authoring provenance (useful for downstream audit).</summary>
     public const string AuthoringAgentMetadataKey = "authoringAgent";
 
-    // Pipeline-wide semaphore. Static so multiple agent instances constructed
-    // per DI scope still share a single 4-slot budget against Foundry.
-    private static readonly SemaphoreSlim GlobalCallGate = new(initialCount: 4, maxCount: 4);
+    // Pipeline-wide gate and schedule so multiple DI instances share one quota.
+    private static readonly SemaphoreSlim GlobalCallGate = new(initialCount: 1, maxCount: 1);
+    private static DateTimeOffset _nextCallAt;
 
     // The predicate validator: strip every legal token and confirm nothing is left.
     // Order matters — longer/more-specific patterns first.
@@ -128,17 +128,22 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
     private readonly IRuleEmbedder _embedder;
     private readonly ILogger<FoundryRuleAuthoringAgent> _log;
     private readonly int _maxRetries;
+    private readonly TimeSpan _minimumRequestInterval;
 
     public FoundryRuleAuthoringAgent(
         IChatClient chat,
         IRuleEmbedder embedder,
         ILogger<FoundryRuleAuthoringAgent>? log = null,
-        int maxRetries = 3)
+        int maxRetries = 3,
+        int requestsPerMinute = 18)
     {
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
         _embedder = embedder ?? throw new ArgumentNullException(nameof(embedder));
+        if (requestsPerMinute < 1)
+            throw new ArgumentOutOfRangeException(nameof(requestsPerMinute));
         _log = log ?? NullLogger<FoundryRuleAuthoringAgent>.Instance;
         _maxRetries = Math.Max(0, maxRetries);
+        _minimumRequestInterval = TimeSpan.FromMinutes(1d / requestsPerMinute);
     }
 
     public async Task<IReadOnlyList<RuleAuthoringSuggestion>> AuthorAsync(
@@ -194,9 +199,14 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         }
         catch (Exception ex)
         {
+            var transient = IsTransient(ex);
             _log.LogWarning(ex,
-                "Foundry authoring call failed permanently for chunk {DocId}@{Start}+{Len}; skipping.",
+                transient
+                    ? "Foundry authoring exhausted retries for chunk {DocId}@{Start}+{Len}; aborting extraction."
+                    : "Foundry authoring call failed permanently for chunk {DocId}@{Start}+{Len}; skipping.",
                 request.SourceSpan.DocumentId, request.SourceSpan.CharStart, request.SourceSpan.CharLength);
+            if (transient)
+                throw;
             return Array.Empty<RuleAuthoringSuggestion>();
         }
 
@@ -246,6 +256,11 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             await GlobalCallGate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
+                var wait = _nextCallAt - DateTimeOffset.UtcNow;
+                if (wait > TimeSpan.Zero)
+                    await Task.Delay(wait, ct).ConfigureAwait(false);
+                _nextCallAt = DateTimeOffset.UtcNow + _minimumRequestInterval;
+
                 var response = await _chat.GetResponseAsync(messages, options, cancellationToken: ct).ConfigureAwait(false);
                 return response.Text ?? string.Empty;
             }
@@ -255,11 +270,11 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             }
             catch (Exception ex) when (attempt <= _maxRetries && IsTransient(ex))
             {
-                var backoffMs = ComputeBackoffMs(attempt);
+                var delay = ComputeRetryDelay(ex, attempt);
                 _log.LogInformation(
                     "Transient authoring failure (attempt {Attempt}/{Max}); backing off {Delay}ms. Error: {Error}",
-                    attempt, _maxRetries, backoffMs, ex.Message);
-                await Task.Delay(backoffMs, ct).ConfigureAwait(false);
+                    attempt, _maxRetries, (long)delay.TotalMilliseconds, ex.Message);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
             }
             finally
             {
@@ -268,12 +283,60 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         }
     }
 
-    private static int ComputeBackoffMs(int attempt)
+    private static TimeSpan ComputeRetryDelay(Exception exception, int attempt)
     {
-        // Exponential: 500ms, 1000ms, 2000ms; plus 0-250ms of jitter.
-        var baseMs = 250 * (1 << attempt);
-        var jitter = Random.Shared.Next(0, 250);
-        return baseMs + jitter;
+        var response = exception.GetType().GetMethod("GetRawResponse", Type.EmptyTypes)?.Invoke(exception, null);
+        var headers = response?.GetType().GetProperty("Headers")?.GetValue(response);
+        if (headers is not null)
+        {
+            var tryGetValue = headers.GetType().GetMethods()
+                .FirstOrDefault(method => method.Name == "TryGetValue"
+                    && method.GetParameters() is [{ ParameterType: var keyType }, { IsOut: true }]
+                    && keyType == typeof(string));
+            if (tryGetValue is not null)
+            {
+                foreach (var header in new[] { "Retry-After-ms", "Retry-After" })
+                {
+                    var arguments = new object?[] { header, null };
+                    if (tryGetValue.Invoke(headers, arguments) is true
+                        && TryParseRetryAfter(header, arguments[1]?.ToString(), out var retryAfter)
+                        && retryAfter > TimeSpan.Zero)
+                        return retryAfter;
+                }
+            }
+        }
+
+        if (GetStatusCode(exception) == 429)
+            return TimeSpan.FromMinutes(1);
+
+        var exponent = Math.Clamp(attempt - 1, 0, 5);
+        var baseMs = Math.Min(30_000, 500 * (1 << exponent));
+        var jitter = Random.Shared.Next(0, Math.Max(1, baseMs / 2));
+        return TimeSpan.FromMilliseconds(baseMs + jitter);
+    }
+
+    private static bool TryParseRetryAfter(string header, string? value, out TimeSpan delay)
+    {
+        delay = TimeSpan.Zero;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var isMilliseconds = header.Equals("Retry-After-ms", StringComparison.OrdinalIgnoreCase);
+        if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var seconds))
+            return false;
+
+        delay = isMilliseconds
+            ? TimeSpan.FromMilliseconds(Math.Max(0, seconds))
+            : TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return true;
+    }
+
+    private static int? GetStatusCode(Exception exception)
+    {
+        var statusProp = exception.GetType().GetProperty("Status");
+        return statusProp?.PropertyType == typeof(int) && statusProp.GetValue(exception) is int status
+            ? status
+            : null;
     }
 
     internal static bool IsTransient(Exception ex)

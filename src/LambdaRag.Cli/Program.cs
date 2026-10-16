@@ -1222,8 +1222,8 @@ static class CliEntry
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"  ! author failed for {file}#{idx}: {ex.Message}");
-                    idx++; continue;
+                    throw new InvalidOperationException(
+                        $"Rule authoring failed for {file}#{idx}; extraction aborted before writing the ruleset.", ex);
                 }
 
                 foreach (var s in suggestions)
