@@ -38,7 +38,8 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
     // Bumping this string invalidates every cached sidecar loudly.
     public const string PromptVersion = "1.1.0";
 
-    private static readonly SemaphoreSlim GlobalCallGate = new(initialCount: 4, maxCount: 4);
+    private static readonly SemaphoreSlim GlobalCallGate = new(initialCount: 1, maxCount: 1);
+    private static DateTimeOffset _nextCallAt;
 
     public const string SystemPrompt = """
         You are a policy-fact extractor. Read one section and populate the
@@ -69,6 +70,7 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
     private readonly IChatClient _chat;
     private readonly ILogger<FoundrySectionFactExtractor> _log;
     private readonly int _maxRetries;
+    private readonly TimeSpan _minimumRequestInterval;
     private readonly string? _cacheDirOverride;
     private readonly bool _refresh;
     private readonly DurationNormalizer _normalizer;
@@ -83,12 +85,16 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
         int maxRetries = 3,
         string? cacheDirOverride = null,
         bool refresh = false,
-        DurationNormalizer? normalizer = null)
+        DurationNormalizer? normalizer = null,
+        int requestsPerMinute = 18)
     {
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
+        if (requestsPerMinute < 1)
+            throw new ArgumentOutOfRangeException(nameof(requestsPerMinute));
         ModelId = string.IsNullOrWhiteSpace(modelId) ? "unknown-model" : modelId;
         _log = log ?? NullLogger<FoundrySectionFactExtractor>.Instance;
         _maxRetries = Math.Max(0, maxRetries);
+        _minimumRequestInterval = TimeSpan.FromMinutes(1d / requestsPerMinute);
         _cacheDirOverride = cacheDirOverride;
         _refresh = refresh;
         _normalizer = normalizer ?? DurationNormalizer.Default;
@@ -118,39 +124,53 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
 
         var cacheDir = SectionFactSidecarIO.ResolveCacheDir(_cacheDirOverride);
         var path = SectionFactSidecarIO.CachePath(cacheDir, document.SourceId, schemaHash);
+        var warnings = new List<string>();
+        var bags = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.Ordinal);
 
         if (!_refresh && File.Exists(path))
         {
             var cached = SectionFactSidecarIO.LoadOrThrow(path, expectedFp);
-            if (!cached.Sections.Values.Any(section => section.ContainsKey("_extraction_failed")))
+            var cacheIsComplete = sections.All(section =>
+                cached.Sections.TryGetValue(section.Id, out var facts)
+                && !facts.ContainsKey("_extraction_failed"));
+            if (cacheIsComplete)
             {
                 _log.LogInformation("Loaded cached fact sidecar ({Sections} sections) from {Path}",
                     cached.Sections.Count, path);
                 return cached;
             }
 
-            _log.LogInformation("Cached fact sidecar contains extraction failures; retrying extraction from source.");
+            foreach (var (id, facts) in cached.Sections)
+            {
+                if (sections.Any(section => section.Id == id)
+                    && !facts.ContainsKey("_extraction_failed"))
+                    bags[id] = facts;
+            }
+            _log.LogInformation(
+                "Resuming fact extraction from cache ({Completed}/{Total} sections complete).",
+                bags.Count, sections.Count);
         }
 
         _log.LogInformation("Extracting facts for {Sections} sections via model {Model}",
             sections.Count, ModelId);
 
         var schemaJson = SchemaToPromptJson(schema);
-        var warnings = new List<string>();
-        var bags = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.Ordinal);
         var scope = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
-        var tasks = sections.Select(async pair =>
+        foreach (var (sectionId, text) in sections)
         {
-            var (sectionId, text) = pair;
+            if (bags.ContainsKey(sectionId)) continue;
             var bag = await ExtractSectionAsync(sectionId, text, schema, schemaJson, warnings, ct)
                 .ConfigureAwait(false);
-            return (sectionId, bag);
-        });
-        var results = await Task.WhenAll(tasks).ConfigureAwait(false);
-
-        foreach (var (id, bag) in results.OrderBy(r => r.sectionId, StringComparer.Ordinal))
-            bags[id] = bag;
+            bags[sectionId] = bag;
+            if (bag.ContainsKey("_rate_limited"))
+            {
+                _log.LogWarning(
+                    "OpenRouter rate limit persisted for section {SectionId}; deferring remaining sections to the next run.",
+                    sectionId);
+                break;
+            }
+        }
 
         var sidecar = new SectionFactSidecar(
             SidecarVersion: SidecarVersion,
@@ -212,6 +232,8 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
             _log.LogWarning(ex, "Fact extraction call failed for section {SectionId}; treating as extraction failure.", sectionId);
             warnings.Add($"section {sectionId}: extraction_failed:{ex.GetType().Name}");
             bag["_extraction_failed"] = true;
+            if (GetStatusCode(ex) == 429)
+                bag["_rate_limited"] = true;
             return bag;
         }
         return ParseAndValidate(raw, sectionId, sectionText, schema, warnings, bag);
@@ -409,6 +431,11 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
             await GlobalCallGate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
+                var wait = _nextCallAt - DateTimeOffset.UtcNow;
+                if (wait > TimeSpan.Zero)
+                    await Task.Delay(wait, ct).ConfigureAwait(false);
+                _nextCallAt = DateTimeOffset.UtcNow + _minimumRequestInterval;
+
                 var response = await _chat.GetResponseAsync(messages, options, cancellationToken: ct).ConfigureAwait(false);
                 return response.Text ?? string.Empty;
             }
@@ -439,7 +466,7 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
                     && keyType == typeof(string));
             if (tryGetValue is not null)
             {
-                foreach (var header in new[] { "Retry-After-ms", "Retry-After" })
+                foreach (var header in new[] { "Retry-After-ms", "Retry-After", "X-RateLimit-Reset" })
                 {
                     var arguments = new object?[] { header, null };
                     if (tryGetValue.Invoke(headers, arguments) is true
@@ -449,6 +476,9 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
                 }
             }
         }
+
+        if (GetStatusCode(exception) == 429)
+            return TimeSpan.FromMinutes(1);
 
         var exponent = Math.Clamp(attempt - 1, 0, 5);
         var baseMs = Math.Min(30_000, 1_000 * (1 << exponent));
@@ -461,28 +491,51 @@ public sealed class FoundrySectionFactExtractor : IFactExtractor
         delay = TimeSpan.Zero;
         if (string.IsNullOrWhiteSpace(value)) return false;
 
-        if (header.Equals("Retry-After-ms", StringComparison.OrdinalIgnoreCase)
-            && double.TryParse(value, System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out var milliseconds))
+        var isMilliseconds = header.Equals("Retry-After-ms", StringComparison.OrdinalIgnoreCase);
+        var isReset = header.Equals("X-RateLimit-Reset", StringComparison.OrdinalIgnoreCase);
+
+        if (isReset && DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var resetAt))
         {
-            delay = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+            delay = resetAt - DateTimeOffset.UtcNow;
             return true;
         }
 
-        if (double.TryParse(value, System.Globalization.NumberStyles.Float,
+        if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out var seconds))
+            return false;
+
+        if (isMilliseconds)
         {
-            delay = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            delay = TimeSpan.FromMilliseconds(Math.Max(0, seconds));
             return true;
         }
 
-        if (DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal, out var retryAt))
+        if (isReset)
         {
-            delay = retryAt - DateTimeOffset.UtcNow;
+            try
+            {
+                var timestamp = (long)seconds;
+                resetAt = seconds > 1_000_000_000_000
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(timestamp)
+                    : seconds > 1_000_000_000
+                        ? DateTimeOffset.FromUnixTimeSeconds(timestamp)
+                        : DateTimeOffset.UtcNow.AddSeconds(Math.Max(0, seconds));
+                delay = resetAt - DateTimeOffset.UtcNow;
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return false;
+            }
             return true;
         }
 
-        return false;
+        delay = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return true;
     }
+
+    private static int? GetStatusCode(Exception exception) =>
+        exception.GetType().GetProperty("Status")?.GetValue(exception) is int status
+            ? status
+            : null;
 }

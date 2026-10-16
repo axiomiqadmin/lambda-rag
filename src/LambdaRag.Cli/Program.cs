@@ -397,6 +397,8 @@ static class CliEntry
         string? rewriteUnavailableReason = null;
         var rewriteAttempted = 0;
         var rewriteEmitted = 0;
+        var rewriteFindingCount = 0;
+        var rewriteSharedSpanCount = 0;
         var rewriteFailureCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         if (emitMarkup)
         {
@@ -422,9 +424,8 @@ static class CliEntry
                     {
                         rewriteUnavailableReason =
                                                         "No LLM editor agent is configured. Set OPENROUTER_API_KEY "
-                                                    + "(or OpenRouter:ApiKey config) to enable the "
-                          + "ComplianceEditor agent. Tracked-change replacements were not emitted; "
-                          + "fail verdicts appear as comments only.";
+                                                    + "(or OpenRouter:ApiKey config) to enable the ComplianceEditor agent. "
+                                                    + "Tracked-change replacements were not emitted; fail verdicts appear as comments only.";
                         Console.WriteLine(
                             "Rewrite:   --rewrite requested but no LLM editor agent is configured. "
                           + "No tracked-change replacements will be emitted; fail verdicts will appear as comments only.");
@@ -456,6 +457,16 @@ static class CliEntry
                     var failVerdicts = report.Verdicts
                         .Where(v => v.Outcome is VerdictOutcome.Fail or VerdictOutcome.Error)
                         .ToList();
+                    var repeatedFailureSpans = failVerdicts
+                        .Where(v => v.Outcome == VerdictOutcome.Fail)
+                        .Select(v => (Verdict: v, Span: v.ClauseSpan ?? v.SourceSpan))
+                        .Where(item => item.Span is not null)
+                        .GroupBy(item => (item.Span!.CharStart, item.Span!.CharLength))
+                        .Where(group => group.Count() > 1)
+                        .Select(group => group.Key)
+                        .ToHashSet();
+                    rewriteFindingCount = failVerdicts.Count;
+                    rewriteSharedSpanCount = repeatedFailureSpans.Count;
 
                     var rewrites = 0;
                     var skipReasons = new List<(string RuleId, string Reason)>();
@@ -470,7 +481,7 @@ static class CliEntry
                         .StartAsync(async ctx =>
                         {
                             var task = ctx.AddTask(
-                                $"[bold]Rewriting[/] 0/{failVerdicts.Count}",
+                                $"[bold]Processing findings[/] 0/{failVerdicts.Count}",
                                 maxValue: failVerdicts.Count);
 
                             for (var i = 0; i < failVerdicts.Count; i++)
@@ -479,7 +490,7 @@ static class CliEntry
                                 var rule = ruleLookup.GetValueOrDefault(v.RuleId);
                                 var ruleId = v.RuleId;
                                 var truncatedId = ruleId.Length > 30 ? ruleId[..30] + "…" : ruleId;
-                                task.Description = $"[bold]Rewriting[/] {i + 1}/{failVerdicts.Count} [green]({rewrites} redlined)[/] [dim]{truncatedId}[/]";
+                                task.Description = $"[bold]Processing findings[/] {i + 1}/{failVerdicts.Count} [green]({rewrites} redlined)[/] [dim]{truncatedId}[/]";
 
                                 var comment = AnnotationFactory.BuildCommentForVerdict(v, rule);
                                 var clauseText = ResolveClauseText(v);
@@ -505,10 +516,21 @@ static class CliEntry
                                     task.Increment(1);
                                     continue;
                                 }
+                                var rewriteSpan = v.ClauseSpan ?? v.SourceSpan;
+                                if (rewriteSpan is not null
+                                    && repeatedFailureSpans.Contains((rewriteSpan.CharStart, rewriteSpan.CharLength)))
+                                {
+                                    skipReasons.Add((ruleId,
+                                        "multiple failures share this clause; left as comments to avoid partial rewrites"));
+                                    annotations.Add(comment);
+                                    task.Increment(1);
+                                    continue;
+                                }
 
                                 string? rewrite = null;
                                 try
                                 {
+                                    rewriteAttempted++;
                                     rewrite = await rewriter
                                         .RewriteAsync(v, clauseText, rule, default)
                                         .ConfigureAwait(false);
@@ -532,13 +554,12 @@ static class CliEntry
                                         skipReasons.Add((ruleId, "LLM returned empty/NO_REWRITE"));
                                     annotations.Add(comment);
                                 }
-                                task.Description = $"[bold]Rewriting[/] {i + 1}/{failVerdicts.Count} [green]({rewrites} redlined)[/] [dim]{truncatedId}[/]";
+                                task.Description = $"[bold]Processing findings[/] {i + 1}/{failVerdicts.Count} [green]({rewrites} redlined)[/] [dim]{truncatedId}[/]";
                                 task.Increment(1);
                             }
                         });
 
                     Console.WriteLine($"Rewrite:   {rewrites} clause rewrite(s) emitted by {rewriter.GetType().Name}");
-                    rewriteAttempted = failVerdicts.Count;
                     rewriteEmitted = rewrites;
                     // If the user asked for --rewrite but ZERO rewrites were
                     // emitted and at least one LLM-call error occurred, treat
@@ -561,10 +582,11 @@ static class CliEntry
                         AnsiConsole.WriteLine();
                         var table = new Table()
                             .Border(TableBorder.Rounded)
-                            .AddColumn("[bold]Rule ID[/]")
+                            .AddColumn("[bold]Skipped findings[/]")
                             .AddColumn("[bold]Skip Reason[/]");
-                        foreach (var (rid, reason) in skipReasons)
-                            table.AddRow(Markup.Escape(rid), Markup.Escape(reason));
+                        foreach (var group in skipReasons.GroupBy(item => item.Reason, StringComparer.Ordinal))
+                            table.AddRow(group.Count().ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                Markup.Escape(group.Key));
                         AnsiConsole.Write(table);
                     }
                 }
@@ -613,8 +635,12 @@ static class CliEntry
             string rewriteCell;
             if (rewriteUnavailableReason is not null)
                 rewriteCell = $"[red]unavailable[/] ({rewriteEmitted}/{rewriteAttempted} emitted)";
-            else if (rewriteRan && rewriteAttempted == 0)
+            else if (rewriteRan && rewriteAttempted == 0 && rewriteFindingCount == 0)
                 rewriteCell = "[dim]n/a — no Fail verdicts[/]";
+            else if (rewriteRan && rewriteAttempted == 0 && rewriteSharedSpanCount > 0)
+                rewriteCell = $"[yellow]0[/] emitted; {rewriteSharedSpanCount} shared clause(s) left as comments";
+            else if (rewriteRan && rewriteAttempted == 0)
+                rewriteCell = "[dim]no eligible rewrite candidates[/]";
             else
                 rewriteCell = $"[green]{rewriteEmitted}[/] / {rewriteAttempted} clause rewrite(s) emitted";
             verdictTable.AddRow("Rewrite (LLM)", rewriteCell);

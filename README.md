@@ -127,6 +127,12 @@ Outputs land in `out/sample/`:
 - `report.json` — verdict, score, per-rule outcome, remediation, full provenance
 - `reviewed.docx` — original document with tracked changes + comments + gap-analysis summary
 
+Rulesets with fact-mode rules make one OpenRouter request per eligible
+document section. Requests are paced at 18 per minute by default; set
+`OPENROUTER_FACT_REQUESTS_PER_MINUTE` (or `OpenRouter:FactRequestsPerMinute`)
+to a value within your account's limit. If a rate limit persists, the review
+keeps completed section facts and resumes unfinished sections on the next run.
+
 ## 📥 How do I plug in a new ruleset?
 
 The platform is designed so you can drop in *any* set of policy
