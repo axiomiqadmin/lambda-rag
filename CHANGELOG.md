@@ -7,7 +7,20 @@ it reaches `1.0.0`.
 
 ## [Unreleased]
 
+### Added
+
+- `review` markup now appends an N/A appendix to `reviewed.docx` (a child
+  heading under an existing "Appendix" section, otherwise a new top-level
+  appendix). The table lists each N/A rule, its definition, the probable
+  section, a category and a reason. Deterministic, no LLM. Pass
+  `--no-na-appendix` to exclude it.
+
 ### Changed
+
+- Match-all rules with only inferred scope (topic overlap / lexical floor) no
+  longer emit per-section missing-requirement gaps. They roll up: dropped if
+  any section passes, otherwise one document-level gap in the top-of-document
+  summary. No golden masters changed.
 
 - Review findings now distinguish explicit contradictions from missing
   requirements. Runtime applicability respects authored scope and

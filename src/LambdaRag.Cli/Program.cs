@@ -74,7 +74,7 @@ static class CliEntry
             lambda-rag — deterministic rules-over-documents
 
             Usage:
-              lambda-rag review   --document <path> --ruleset <path> --out <dir> [--domain <name>] [--mode report|markup|both] [--overlay <path>] [--annotate-pass] [--rewrite] [--applicability-floor <0.0-1.0>] [--rule-level-stats] [--refresh-facts] [--facts-cache-dir <path>]
+              lambda-rag review   --document <path> --ruleset <path> --out <dir> [--domain <name>] [--mode report|markup|both] [--overlay <path>] [--annotate-pass] [--no-na-appendix] [--rewrite] [--applicability-floor <0.0-1.0>] [--rule-level-stats] [--refresh-facts] [--facts-cache-dir <path>]
               lambda-rag project  --document <path> --out <path>
               lambda-rag parse    --document <path> --out <path>
               lambda-rag dump-tree --document <path> [--out <path>]   # PageIndex-style section tree (offline, LLM-free)
@@ -214,6 +214,7 @@ static class CliEntry
         if (mode is not ("report" or "markup" or "both"))
             throw new ArgumentException("--mode must be one of: report, markup, both");
         var annotatePass = HasFlag(args, "annotate-pass");
+        var includeNaAppendix = !HasFlag(args, "no-na-appendix");
         var enableRewrite = HasFlag(args, "rewrite");
         // Pillar 10 (#152) — optional lexical applicability floor + rule-level
         // stats. Off by default so existing golden-master reports stay
@@ -518,6 +519,13 @@ static class CliEntry
                 try
                 {
                     markupResult = markup.Apply(documentPath, markupPath, annotations);
+                    if (includeNaAppendix)
+                    {
+                        var naRows = NotApplicableAppendix.BuildRows(
+                            report, ruleLookup, NotApplicableAppendix.ReadSections(markupPath));
+                        NotApplicableAppendix.Append(markupPath, naRows);
+                        Console.WriteLine($"Appendix:  {naRows.Count} N/A rule(s) listed in reviewed.docx");
+                    }
                     if (markupResult.HasFailures)
                         markupFailure = $"{markupResult.Failures.Count} annotation(s) failed during markup application";
                 }

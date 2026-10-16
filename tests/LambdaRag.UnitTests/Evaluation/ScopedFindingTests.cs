@@ -106,12 +106,28 @@ public class ScopedFindingTests
 
         var v = report.Verdicts.Should().ContainSingle().Subject;
         v.Outcome.Should().Be(VerdictOutcome.Gap);
-        v.FindingKind.Should().Be(FindingKinds.MissingRequirement);
-        v.AnchorKind.Should().Be(AnchorKinds.SectionScope);
-        v.UnanchoredReason.Should().Be(UnanchoredReasons.MissingRequirementNoQuote);
-        v.RewriteEligible.Should().BeFalse();
+        v.MatchedSectionId.Should().BeNull("an inferred-scope omission is document-level, not a section defect");
+        v.AnchorKind.Should().NotBe(AnchorKinds.SectionScope);
+        v.RewriteEligible.Should().NotBe(true);
         v.ClauseSpan.Should().BeNull("an unresolved target must never widen to the whole section");
-        v.ScopeBasis.Should().Be(ScopeBases.TopicOverlap);
+    }
+
+    [Fact]
+    public async Task Missing_requirement_is_dropped_when_another_section_satisfies_a_match_all_rule()
+    {
+        var rule = BroadRule(
+            "R-WIF",
+            "Pods SHALL use workload identity federation",
+            "input1.text.Contains(\"workload identity federation\")");
+        var doc = Doc(
+            ("s1", "Pods use workload identity today but keep static service principal keys."),
+            ("s2", "Pods use workload identity federation for cloud APIs."));
+
+        var report = await Build().EvaluateAsync(Set(rule), doc);
+
+        var v = report.Verdicts.Should().ContainSingle().Subject;
+        v.Outcome.Should().Be(VerdictOutcome.Pass);
+        report.Gaps.Should().Be(0);
     }
 
     [Fact]

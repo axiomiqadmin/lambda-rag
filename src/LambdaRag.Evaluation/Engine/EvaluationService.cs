@@ -214,6 +214,7 @@ public sealed class EvaluationService
                 continue;
             }
 
+            var ruleVerdictStart = verdicts.Count;
             var emittedForRule = 0;
             var floorFilteredSections = 0;
             var outOfScopeSections = 0;
@@ -330,6 +331,11 @@ public sealed class EvaluationService
                 emittedForRule++;
             }
 
+            if (IsMatchAllSelector(rule.Selector))
+            {
+                CollapseMatchAllMissingRequirements(rule, ruleSet, verdicts, ruleVerdictStart);
+            }
+
             if (emittedForRule == 0)
             {
                 // Pillar 10 (#152) — if the lexical applicability floor was
@@ -364,6 +370,45 @@ public sealed class EvaluationService
         }
 
         return BuildReport(ruleSet, document, verdicts);
+    }
+
+    /// <summary>
+    /// A match-all selector with only inferred scope (topic overlap or lexical
+    /// floor) evaluates every section, so a per-section missing-requirement
+    /// Gap only says "this topical section lacks the literal", not "the
+    /// document lacks the requirement". Roll those up:
+    /// if any section satisfies the rule the gaps are dropped; otherwise they
+    /// collapse into one document-level Gap (no section anchor), which the
+    /// markup renders in the top-of-document gaps summary.
+    /// </summary>
+    private void CollapseMatchAllMissingRequirements(
+        Rule rule, RuleSet ruleSet, List<Verdict> verdicts, int start)
+    {
+        var scoped = new List<int>();
+        var anyPass = false;
+        for (var i = start; i < verdicts.Count; i++)
+        {
+            var v = verdicts[i];
+            if (v.Outcome == VerdictOutcome.Pass) anyPass = true;
+            else if (v.Outcome == VerdictOutcome.Gap
+                && string.Equals(v.AnchorKind, AnchorKinds.SectionScope, StringComparison.Ordinal)
+                && v.ScopeBasis is ScopeBases.TopicOverlap or ScopeBases.LexicalFloor)
+                scoped.Add(i);
+        }
+        if (scoped.Count == 0) return;
+
+        for (var k = scoped.Count - 1; k >= 0; k--) verdicts.RemoveAt(scoped[k]);
+        if (anyPass) return;
+
+        verdicts.Add(BuildVerdict(
+            rule, ruleSet,
+            outcome: VerdictOutcome.Gap,
+            section: null,
+            input: new JsonObject(),
+            span: rule.SourceSpan,
+            error: null,
+            remediationText: RemediationRenderer.Render(rule.Remediation, rule, null)
+                ?? NoMatchRemediation(rule)));
     }
 
     /// <summary>

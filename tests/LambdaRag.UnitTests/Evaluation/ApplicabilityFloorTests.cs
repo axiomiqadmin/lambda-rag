@@ -199,15 +199,16 @@ public class ApplicabilityFloorTests
         var report = await Build(applicabilityFloor: 0.0, emitRuleLevelStats: true)
             .EvaluateAsync(Set(rule), doc);
 
-        // s2 is in scope but omits the path (Gap); s3 is unrelated (no verdict).
+        // s2 is in scope but omits the path; s1 satisfies it, so the rolled-up
+        // rule has no gap. s3 is unrelated (no verdict).
         report.Passed.Should().Be(1);
         report.Failed.Should().Be(0);
-        report.Gaps.Should().Be(1);
+        report.Gaps.Should().Be(0);
         report.TotalUniqueRules.Should().Be(1);
         report.RulesPassed.Should().Be(1);
         report.RulesFailed.Should().Be(0);
         report.RuleScore.Should().Be(1.0);
-        report.Score.Should().BeApproximately(0.5, 1e-9);
+        report.Score.Should().BeApproximately(1.0, 1e-9);
     }
 
     [Fact]
