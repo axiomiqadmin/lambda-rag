@@ -77,6 +77,94 @@ public sealed record Verdict(
     /// pre-Pillar-6 verdict JSON stays byte-identical.
     /// </summary>
     public IReadOnlyList<BindingRecord>? SemanticBindings { get; init; }
+
+    /// <summary>
+    /// Whether a Fail/Gap is an explicit contradiction of the document text
+    /// or a missing requirement (see <see cref="FindingKinds"/>). Null on
+    /// verdicts that are not findings, so legacy JSON is unchanged.
+    /// </summary>
+    public string? FindingKind { get; init; }
+
+    /// <summary>
+    /// What <see cref="SourceSpan"/> (the evidence span) points at (see
+    /// <see cref="AnchorKinds"/>). Only <c>contradictory_text</c> and
+    /// <c>rule_anchor</c> are text-precise; <c>section_scope</c> and
+    /// <c>unresolved</c> mean the span is the section's own span, NOT
+    /// evidence, and must not be presented as a contradictory quote.
+    /// </summary>
+    public string? AnchorKind { get; init; }
+
+    /// <summary>
+    /// Granularity of <see cref="ClauseSpan"/> when set (see
+    /// <see cref="ClauseKinds"/>). The clause span is the editable target and
+    /// is never widened to the whole section when unresolved (it is null).
+    /// </summary>
+    public string? ClauseKind { get; init; }
+
+    /// <summary>
+    /// Stable reason (see <see cref="UnanchoredReasons"/>) set whenever the
+    /// finding has no text-precise evidence span or no editable clause span.
+    /// </summary>
+    public string? UnanchoredReason { get; init; }
+
+    /// <summary>
+    /// False when downstream markup must not request or emit a tracked-change
+    /// rewrite for this finding. Null when not a finding.
+    /// </summary>
+    public bool? RewriteEligible { get; init; }
+
+    /// <summary>
+    /// How the rule was established as in scope for the section (see
+    /// <see cref="ScopeBases"/>), recorded for audit.
+    /// </summary>
+    public string? ScopeBasis { get; init; }
+}
+
+/// <summary>Stable <see cref="Verdict.FindingKind"/> values.</summary>
+public static class FindingKinds
+{
+    public const string Contradiction = "contradiction";
+    public const string MissingRequirement = "missing_requirement";
+    public const string Unclassified = "unclassified";
+}
+
+/// <summary>Stable <see cref="Verdict.AnchorKind"/> values.</summary>
+public static class AnchorKinds
+{
+    public const string ContradictoryText = "contradictory_text";
+    public const string RuleAnchor = "rule_anchor";
+    public const string SectionScope = "section_scope";
+    public const string Unresolved = "unresolved";
+}
+
+/// <summary>Stable <see cref="Verdict.ClauseKind"/> values.</summary>
+public static class ClauseKinds
+{
+    public const string Paragraph = "paragraph";
+    public const string Sentence = "sentence";
+}
+
+/// <summary>Stable <see cref="Verdict.UnanchoredReason"/> values.</summary>
+public static class UnanchoredReasons
+{
+    public const string MissingRequirementNoQuote = "missing_requirement_no_quote";
+    public const string NoLiteralEvidence = "no_literal_evidence";
+    public const string NoParagraphMetadata = "no_paragraph_metadata";
+    public const string NoSectionText = "no_section_text";
+}
+
+/// <summary>Stable <see cref="Verdict.ScopeBasis"/> values.</summary>
+public static class ScopeBases
+{
+    public const string SelectorScoped = "selector_scoped";
+    public const string PredicateScoped = "predicate_scoped";
+    public const string SemanticGate = "semantic_gate";
+    public const string AuthoredScope = "authored_scope";
+    /// <summary>Internal sentinel: authored scope terms did not match; never emitted on a verdict.</summary>
+    public const string AuthoredScopeNotMet = "authored_scope_not_met";
+    public const string SemanticAnchors = "semantic_anchors";
+    public const string LexicalFloor = "lexical_floor";
+    public const string TopicOverlap = "topic_overlap";
 }
 
 /// <summary>

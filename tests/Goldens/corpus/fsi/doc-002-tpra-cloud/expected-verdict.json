@@ -12,15 +12,15 @@
   "score": 0.1875,
   "totalRules": 16,
   "passed": 3,
-  "failed": 13,
+  "failed": 0,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
     {
-      "id": "lr1:8dd0e46054df8612ede54314768bbc2a26961eae89ed15744ed5b7db5b08c15b",
+      "id": "lr1:391acd171f8ca981eb2a92e9dcef7c10d0a006c64a4bb5334bd4a4a6c88baeb3",
       "ruleId": "OSFI-B10-AuditAccess",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"audit\") || input1.text.Contains(\"examination\")) && input1.text.Contains(\"OSFI\")",
       "evaluatedInput": {
         "id": "s_00000000",
@@ -86,19 +86,17 @@
       "matchedSectionId": "s_00000000",
       "remediationText": "Add to Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury): \"The third party shall provide the FRFI, the FRFI's internal and external auditors, and OSFI with rights of audit, examination, and access to records and personnel relevant to this arrangement.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 77,
-        "charLength": 73,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)",
-        "charEnd": 150
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:8310815c74710617474ceab81abc587b11af3e6de15310d95f5e056621e8e493",
+      "id": "lr1:4018a5cb14ac9534fd7ae7564ab1018354adcc2d150fd17f0b1d0bd3680d08a5",
       "ruleId": "OSFI-B10-AuditAccess",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"audit\") || input1.text.Contains(\"examination\")) && input1.text.Contains(\"OSFI\")",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -164,19 +162,17 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Add to 2. Outsourcing — Governance and Third-Party Risk Management Framework: \"The third party shall provide the FRFI, the FRFI's internal and external auditors, and OSFI with rights of audit, examination, and access to records and personnel relevant to this arrangement.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 533,
-        "charLength": 361,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/2. Outsourcing — Governance and Third-Party Risk Management Framework",
-        "charEnd": 894
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:35ae298bff2714f929a0038cc42dd95e4d8d6d7115876de2f953688d3296b25f",
+      "id": "lr1:c278ac5f89bd32dd2b5304758581230da2f00ddddf31cd04c7c69e2a90663487",
       "ruleId": "OSFI-B10-AuditAccess",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"audit\") || input1.text.Contains(\"examination\")) && input1.text.Contains(\"OSFI\")",
       "evaluatedInput": {
         "id": "s_00000003",
@@ -244,13 +240,11 @@
       "matchedSectionId": "s_00000003",
       "remediationText": "Add to 3. Subcontracting and Outsourcing of Services: \"The third party shall provide the FRFI, the FRFI's internal and external auditors, and OSFI with rights of audit, examination, and access to records and personnel relevant to this arrangement.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 951,
-        "charLength": 279,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/3. Subcontracting and Outsourcing of Services",
-        "charEnd": 1230
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:88c9577d15aaabab8293e5e5d731441600a2056d04315dc8a276f50d5894fa7b",
@@ -393,10 +387,10 @@
       "predicateText": "input1.category == \"business_continuity\""
     },
     {
-      "id": "lr1:8ead0aff2648d9bdd3ea3d986091f53ce97f4efc3ccb5f9b29974e9b225d1687",
+      "id": "lr1:779a53157f8c3bc2e0dfee1b67937284b31c1f2e0d16ed2fa67ebc8ee0744dc6",
       "ruleId": "OSFI-B10-BCP",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"BCP\") || input1.text.Contains(\"business continuity\")) && (input1.text.Contains(\"RTO\") || input1.text.Contains(\"RPO\") || input1.text.Contains(\"recovery time\") || input1.text.Contains(\"recovery point\"))",
       "evaluatedInput": {
         "id": "s_00000006",
@@ -464,19 +458,17 @@
       "matchedSectionId": "s_00000006",
       "remediationText": "Update 6. Operational Resilience — Exit Plan and Transition to require a documented business continuity and disaster recovery plan with explicit Recovery Time Objective (RTO) and Recovery Point Objective (RPO) commitments aligned to the criticality of the outsourced activity, per OSFI Guideline B-10 and E-21.",
       "predicateText": "input1.category == \"business_continuity\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 1987,
-        "charLength": 373,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/6. Operational Resilience — Exit Plan and Transition",
-        "charEnd": 2360
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:ec687647ddf95ed30e98d5a4de27a5a456cacb4d64a0950e4413393550617a5f",
+      "id": "lr1:d2da51856900abac49037c9046c85d16807fa9c5be57292a6c393fa60249d52d",
       "ruleId": "OSFI-B10-ExitPlan",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"exit plan\") && (input1.text.Contains(\"trigger\") || input1.text.Contains(\"invocation\") || input1.text.Contains(\"transition\"))",
       "evaluatedInput": {
         "id": "s_00000005",
@@ -544,13 +536,11 @@
       "matchedSectionId": "s_00000005",
       "remediationText": "Add to 5. Business Continuity: \"The parties shall maintain a documented exit plan, including invocation triggers for both planned (non-stressed) and unplanned (stressed) exit, transition assistance obligations, and the return or certified destruction of FRFI data on termination.\"",
       "predicateText": "input1.category == \"business_continuity\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 1645,
-        "charLength": 279,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/5. Business Continuity",
-        "charEnd": 1924
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:e920e57e51ef906ba3d667291903614f442c03139b1e11448d778038b5ea6428",
@@ -624,10 +614,10 @@
       "predicateText": "input1.category == \"business_continuity\""
     },
     {
-      "id": "lr1:9b7cc9dd2369e94adaad61b85c474738dc06f29b5f062fd0fbbfbb00c013fd36",
+      "id": "lr1:0817c03dbccdd85358bfef041b59e9b250ae4307283ec5583f820ef66f778ca7",
       "ruleId": "OSFI-B10-Subcontracting",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"subcontract\") || input1.text.Contains(\"sub-contract\")) && (input1.text.Contains(\"consent\") || input1.text.Contains(\"prior notice\") || input1.text.Contains(\"approval\"))",
       "evaluatedInput": {
         "id": "s_00000000",
@@ -693,19 +683,17 @@
       "matchedSectionId": "s_00000000",
       "remediationText": "Update Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury) to require the third party to obtain the FRFI's prior written consent (or, at a minimum, prior notice) before engaging or replacing any subcontractor that provides services material to the arrangement, per OSFI Guideline B-10.",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 77,
-        "charLength": 73,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)",
-        "charEnd": 150
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:400148798c4d7059d777c38876132672177588ab7e4bcba2c64001e297b2131d",
+      "id": "lr1:3321764bb45af42c6d7118ee94e1da93d8f27d6f189b2e869f54aef6c2136c51",
       "ruleId": "OSFI-B10-Subcontracting",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"subcontract\") || input1.text.Contains(\"sub-contract\")) && (input1.text.Contains(\"consent\") || input1.text.Contains(\"prior notice\") || input1.text.Contains(\"approval\"))",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -771,19 +759,17 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Update 2. Outsourcing — Governance and Third-Party Risk Management Framework to require the third party to obtain the FRFI's prior written consent (or, at a minimum, prior notice) before engaging or replacing any subcontractor that provides services material to the arrangement, per OSFI Guideline B-10.",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 533,
-        "charLength": 361,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/2. Outsourcing — Governance and Third-Party Risk Management Framework",
-        "charEnd": 894
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:9cd82d2c1a0d7328b1fda41a7ee8b46b1a2a008bef9256063ac7a7f4b1860a49",
+      "id": "lr1:a387a831e2e24439f810022d3bbb9e54a34467a51a4ac48498b0ef85220bc35c",
       "ruleId": "OSFI-B10-Subcontracting",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"subcontract\") || input1.text.Contains(\"sub-contract\")) && (input1.text.Contains(\"consent\") || input1.text.Contains(\"prior notice\") || input1.text.Contains(\"approval\"))",
       "evaluatedInput": {
         "id": "s_00000003",
@@ -838,10 +824,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 1010,
-        "charLength": 11,
+        "charStart": 901,
+        "charLength": 48,
         "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/3. Subcontracting and Outsourcing of Services",
-        "charEnd": 1021
+        "charEnd": 949
       },
       "errorMessage": "Rule 'OSFI-B10-Subcontracting' failed: Subcontracting by the third party must be subject to FRFI prior notice or consent and the contract must extend FRFI rights through the subcontracting chain.",
       "evidenceQuotes": [
@@ -851,19 +837,17 @@
       "matchedSectionId": "s_00000003",
       "remediationText": "Update 3. Subcontracting and Outsourcing of Services to require the third party to obtain the FRFI's prior written consent (or, at a minimum, prior notice) before engaging or replacing any subcontractor that provides services material to the arrangement, per OSFI Guideline B-10.",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 951,
-        "charLength": 279,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/3. Subcontracting and Outsourcing of Services",
-        "charEnd": 1230
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:a94153c22e5fadf7e6ce2149a2e94e58ebce40febad30f24ed4761fa07d926d8",
+      "id": "lr1:92a07b7597d57a9483beba859f7c9eac726ba9ab35f7e2622f65458fd1a7613c",
       "ruleId": "OSFI-B10-Subcontracting",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"subcontract\") || input1.text.Contains(\"sub-contract\")) && (input1.text.Contains(\"consent\") || input1.text.Contains(\"prior notice\") || input1.text.Contains(\"approval\"))",
       "evaluatedInput": {
         "id": "s_00000004",
@@ -929,19 +913,17 @@
       "matchedSectionId": "s_00000004",
       "remediationText": "Update 4. Audit and Examination — Vendor Risk Oversight to require the third party to obtain the FRFI's prior written consent (or, at a minimum, prior notice) before engaging or replacing any subcontractor that provides services material to the arrangement, per OSFI Guideline B-10.",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 1289,
-        "charLength": 323,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/4. Audit and Examination — Vendor Risk Oversight",
-        "charEnd": 1612
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:da5fa1933bc7b39932f458dd783977c4c223752f38c7142df7796c5131649cf4",
+      "id": "lr1:9891cdd99df06706a3bf2a228ab4f3cc3d39ac87413fe22bc4e3eafba7929cdc",
       "ruleId": "OSFI-B10-TPRMF",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"TPRMF\") || input1.text.Contains(\"Third-Party Risk Management Framework\") || input1.text.Contains(\"third-party risk management framework\")) && (input1.text.Contains(\"risk-tier\") || input1.text.Contains(\"risk tier\") || input1.text.Contains(\"criticality\")) && (input1.text.Contains(\"accountabilit\") || input1.text.Contains(\"lifecycle\") || input1.text.Contains(\"policies\"))",
       "evaluatedInput": {
         "id": "s_00000000",
@@ -1007,19 +989,17 @@
       "matchedSectionId": "s_00000000",
       "remediationText": "Add to Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury): \"This arrangement is governed by the FRFI's enterprise-wide Third-Party Risk Management Framework (TPRMF), under which the arrangement has been risk-tiered and assessed for criticality, per OSFI Guideline B-10 Principle 2.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 77,
-        "charLength": 73,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)",
-        "charEnd": 150
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:ab491e549475a01fb09255762d05fdf89c293ea128cce9896cc39cadb1194580",
+      "id": "lr1:9667bea15efa3e6be33bd561ccd15aeb0ac78ae90ae31d63cad790d83797e5d7",
       "ruleId": "OSFI-B10-TPRMF",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"TPRMF\") || input1.text.Contains(\"Third-Party Risk Management Framework\") || input1.text.Contains(\"third-party risk management framework\")) && (input1.text.Contains(\"risk-tier\") || input1.text.Contains(\"risk tier\") || input1.text.Contains(\"criticality\")) && (input1.text.Contains(\"accountabilit\") || input1.text.Contains(\"lifecycle\") || input1.text.Contains(\"policies\"))",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -1072,10 +1052,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 630,
-        "charLength": 5,
+        "charStart": 459,
+        "charLength": 72,
         "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/2. Outsourcing — Governance and Third-Party Risk Management Framework",
-        "charEnd": 635
+        "charEnd": 531
       },
       "errorMessage": "Rule 'OSFI-B10-TPRMF' failed: The arrangement must be governed by an enterprise-wide Third-Party Risk Management Framework (TPRMF) that sets out clear accountabilities, risk-tiering methodology, and lifecycle policies.",
       "evidenceQuotes": [
@@ -1085,19 +1065,17 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Add to 2. Outsourcing — Governance and Third-Party Risk Management Framework: \"This arrangement is governed by the FRFI's enterprise-wide Third-Party Risk Management Framework (TPRMF), under which the arrangement has been risk-tiered and assessed for criticality, per OSFI Guideline B-10 Principle 2.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 533,
-        "charLength": 361,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/2. Outsourcing — Governance and Third-Party Risk Management Framework",
-        "charEnd": 894
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:4e9ae327463ca52fa26c53f644729566afea09f44c39f2f50a6aa45218b305cb",
+      "id": "lr1:a97409313d9e77934ecb52093b4c7ec805d37ab942312a12a3403c22864d4962",
       "ruleId": "OSFI-B10-TPRMF",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"TPRMF\") || input1.text.Contains(\"Third-Party Risk Management Framework\") || input1.text.Contains(\"third-party risk management framework\")) && (input1.text.Contains(\"risk-tier\") || input1.text.Contains(\"risk tier\") || input1.text.Contains(\"criticality\")) && (input1.text.Contains(\"accountabilit\") || input1.text.Contains(\"lifecycle\") || input1.text.Contains(\"policies\"))",
       "evaluatedInput": {
         "id": "s_00000003",
@@ -1165,19 +1143,17 @@
       "matchedSectionId": "s_00000003",
       "remediationText": "Add to 3. Subcontracting and Outsourcing of Services: \"This arrangement is governed by the FRFI's enterprise-wide Third-Party Risk Management Framework (TPRMF), under which the arrangement has been risk-tiered and assessed for criticality, per OSFI Guideline B-10 Principle 2.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 951,
-        "charLength": 279,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/3. Subcontracting and Outsourcing of Services",
-        "charEnd": 1230
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:74e66713f31592d5c49010d4c2c0994b2755cd1e399e838fc5cb840be1796fe5",
+      "id": "lr1:eba85c9d12843b16ebaf259ff455d6bb30795c309355f48982b9b84ef7703182",
       "ruleId": "OSFI-B10-TPRMF",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"TPRMF\") || input1.text.Contains(\"Third-Party Risk Management Framework\") || input1.text.Contains(\"third-party risk management framework\")) && (input1.text.Contains(\"risk-tier\") || input1.text.Contains(\"risk tier\") || input1.text.Contains(\"criticality\")) && (input1.text.Contains(\"accountabilit\") || input1.text.Contains(\"lifecycle\") || input1.text.Contains(\"policies\"))",
       "evaluatedInput": {
         "id": "s_00000004",
@@ -1243,15 +1219,13 @@
       "matchedSectionId": "s_00000004",
       "remediationText": "Add to 4. Audit and Examination — Vendor Risk Oversight: \"This arrangement is governed by the FRFI's enterprise-wide Third-Party Risk Management Framework (TPRMF), under which the arrangement has been risk-tiered and assessed for criticality, per OSFI Guideline B-10 Principle 2.\"",
       "predicateText": "input1.category == \"third_party_risk\"",
-      "clauseSpan": {
-        "documentId": "lr1:f2accf47f91dfe6d68da21ddf4188486d05d1418d370a5123b4ab4d17762783d",
-        "charStart": 1289,
-        "charLength": 323,
-        "headingPath": "/Third-Party Risk Assessment — Cloud SaaS Onboarding (BetaBank Treasury)/4. Audit and Examination — Vendor Risk Oversight",
-        "charEnd": 1612
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 0
+  "gaps": 13
 }

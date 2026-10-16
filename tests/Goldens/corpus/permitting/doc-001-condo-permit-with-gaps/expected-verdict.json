@@ -12,7 +12,7 @@
   "score": 0,
   "totalRules": 5,
   "passed": 0,
-  "failed": 2,
+  "failed": 0,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
@@ -61,10 +61,10 @@
       "predicateText": "input1.category == \"environmental_review\""
     },
     {
-      "id": "lr1:43388048361fadde42e210c5f7b39b7cc10c281a38e964743568df56628ef77d",
+      "id": "lr1:e0e1008629bfc7532b7a6243c2bb3a0bc82b8a1853dce3b4ab70be1023528ca0",
       "ruleId": "PERMIT-FIRE-EGRESS-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"exit\") && (input1.text.Contains(\"3.4.2\") || input1.text.Contains(\"OBC 3.4\")) && (input1.text.Contains(\"in accordance with\") || input1.text.Contains(\"complies with\") || input1.text.Contains(\"compliant\") || input1.text.Contains(\"within the\"))",
       "evaluatedInput": {
         "id": "s_00000005",
@@ -117,10 +117,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:0b2f9f8f83e5362b92375771d71c28a3b6126d721154acc481b0a82e81020478",
-        "charStart": 1342,
-        "charLength": 4,
+        "charStart": 1180,
+        "charLength": 14,
         "headingPath": "/Building Permit Application — 245 Bay Tower, Toronto, ON/Fire Egress",
-        "charEnd": 1346
+        "charEnd": 1194
       },
       "errorMessage": "Rule 'PERMIT-FIRE-EGRESS-001' failed: Travel distance from any point in a floor area to the nearest exit must comply with Ontario Building Code 3.4.2 limits.",
       "evidenceQuotes": [
@@ -130,19 +130,17 @@
       "matchedSectionId": "s_00000005",
       "remediationText": "Add to Fire Egress: state the maximum travel distance from any point in the floor area to the nearest exit and confirm conformance with OBC 3.4.2.",
       "predicateText": "input1.category == \"fire_egress\"",
-      "clauseSpan": {
-        "documentId": "lr1:0b2f9f8f83e5362b92375771d71c28a3b6126d721154acc481b0a82e81020478",
-        "charStart": 1196,
-        "charLength": 201,
-        "headingPath": "/Building Permit Application — 245 Bay Tower, Toronto, ON/Fire Egress",
-        "charEnd": 1397
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:f7c052347ee55fd5d4b329ed30edca25a5c26fdde9572604acd22ee0b776da19",
+      "id": "lr1:58bab242c6a3ea6fb211d410d352d2a1aab7f970ec7cc4749482a26eb3d22f62",
       "ruleId": "PERMIT-FIRE-SPRINK-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"NFPA 13\") || (input1.text.Contains(\"sprinkler\") && (input1.text.Contains(\"OBC 3.2.2\") || input1.text.Contains(\"3.2.2\")))",
       "evaluatedInput": {
         "id": "s_00000006",
@@ -195,10 +193,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:0b2f9f8f83e5362b92375771d71c28a3b6126d721154acc481b0a82e81020478",
-        "charStart": 1452,
-        "charLength": 9,
+        "charStart": 1401,
+        "charLength": 38,
         "headingPath": "/Building Permit Application — 245 Bay Tower, Toronto, ON/Fire Suppression — Sprinkler System",
-        "charEnd": 1461
+        "charEnd": 1439
       },
       "errorMessage": "Rule 'PERMIT-FIRE-SPRINK-001' failed: Buildings of the major occupancies and sizes triggered by OBC 3.2.2 must be sprinklered to NFPA 13.",
       "evidenceQuotes": [
@@ -208,13 +206,11 @@
       "matchedSectionId": "s_00000006",
       "remediationText": "Add to Fire Suppression — Sprinkler System: confirm fully-sprinklered design per OBC 3.2.2 and reference NFPA 13.",
       "predicateText": "input1.category == \"fire_suppression\"",
-      "clauseSpan": {
-        "documentId": "lr1:0b2f9f8f83e5362b92375771d71c28a3b6126d721154acc481b0a82e81020478",
-        "charStart": 1441,
-        "charLength": 189,
-        "headingPath": "/Building Permit Application — 245 Bay Tower, Toronto, ON/Fire Suppression — Sprinkler System",
-        "charEnd": 1630
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:4fe5aeaff029d7df3eee5e26687a814c35b2f54234fb46e50198374dfa78c0e0",
@@ -240,5 +236,5 @@
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 3
+  "gaps": 5
 }

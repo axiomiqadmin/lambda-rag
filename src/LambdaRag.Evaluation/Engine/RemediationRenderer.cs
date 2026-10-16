@@ -93,7 +93,7 @@ public static class RemediationRenderer
         "version" => rule.Version,
         "naturalLanguage" => rule.NaturalLanguage,
         "evidenceQuote" => rule.EvidenceQuote,
-        "severity" => rule.Severity.ToString(),
+        "severity" => RuleSeverityPolicy.EffectiveSeverity(rule).ToString(),
         _ => null,
     };
 

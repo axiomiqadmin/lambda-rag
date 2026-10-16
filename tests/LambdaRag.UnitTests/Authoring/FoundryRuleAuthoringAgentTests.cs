@@ -55,21 +55,24 @@ public class FoundryRuleAuthoringAgentTests
               "naturalLanguage": "Privileged access SHALL require MFA.",
               "predicate": "input1.text.ToLower().Contains(\"mfa\")",
               "remediation": "Add a clause requiring MFA for privileged access.",
-              "sourceQuote": "Privileged access SHALL require MFA."
+              "sourceQuote": "Privileged access SHALL require MFA.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             },
             {
               "topicSlug": "NET",
               "naturalLanguage": "Public ingress SHALL traverse a WAF in prevention mode.",
               "predicate": "input1.text.ToLower().Contains(\"waf\") && (input1.text.ToLower().Contains(\"prevention\") || input1.text.ToLower().Contains(\"blocking\"))",
               "remediation": "State that ingress traverses a WAF configured in prevention (blocking) mode.",
-              "sourceQuote": "All public ingress SHALL traverse a WAF in prevention mode."
+              "sourceQuote": "All public ingress SHALL traverse a WAF in prevention mode.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             },
             {
               "topicSlug": "LOG",
               "naturalLanguage": "Audit logs SHALL be forwarded to a tamper-resistant SIEM.",
               "predicate": "input1.text.ToLower().Contains(\"siem\") || input1.text.ToLower().Contains(\"sentinel\")",
               "remediation": "Forward control-plane and data-plane audit logs to a SIEM (e.g. Sentinel).",
-              "sourceQuote": "Audit logs SHALL be forwarded to a tamper-resistant SIEM."
+              "sourceQuote": "Audit logs SHALL be forwarded to a tamper-resistant SIEM.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             }
           ]
         }
@@ -103,21 +106,24 @@ public class FoundryRuleAuthoringAgentTests
               "naturalLanguage": "Good rule.",
               "predicate": "input1.text.Contains(\"mfa\")",
               "remediation": "keep",
-              "sourceQuote": "Good."
+              "sourceQuote": "Good.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             },
             {
               "topicSlug": "IAM",
               "naturalLanguage": "Bad rule with LINQ.",
               "predicate": "input1.text.Split(' ').Any(w => w == \"mfa\")",
               "remediation": "drop",
-              "sourceQuote": "Bad."
+              "sourceQuote": "Bad.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             },
             {
               "topicSlug": "iam",
               "naturalLanguage": "Bad slug (lowercase).",
               "predicate": "input1.text.Contains(\"x\")",
               "remediation": "drop",
-              "sourceQuote": "Also bad."
+              "sourceQuote": "Also bad.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             }
           ]
         }
@@ -147,7 +153,8 @@ public class FoundryRuleAuthoringAgentTests
               "naturalLanguage": "MFA required.",
               "predicate": "input1.text.ToLower().Contains(\"mfa\")",
               "remediation": "Add MFA.",
-              "sourceQuote": "All privileged users need MFA."
+              "sourceQuote": "All privileged users need MFA.",
+              "obligation": "must", "scopeTerms": ["scopeword"], "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence": ["evidence"], "severity": "Deviation", "severityBasis": ""
             }
           ]
         }
@@ -198,7 +205,7 @@ public class FoundryRuleAuthoringAgentTests
         // Quote "q" must appear verbatim in the input for the defensibility
         // validator to admit it.
         var good = """
-        {"rules":[{"topicSlug":"IAM","naturalLanguage":"n","predicate":"input1.text.Contains(\"x\")","remediation":"r","sourceQuote":"q"}]}
+        {"rules":[{"topicSlug":"IAM","naturalLanguage":"n","predicate":"input1.text.Contains(\"x\")","remediation":"r","sourceQuote":"q","obligation":"must","scopeTerms":["scopeword"],"relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence":["e"],"severity":"Deviation","severityBasis":""}]}
         """;
         var chat = new FakeChatClient(new Queue<Func<string>>(new Func<string>[]
         {
@@ -267,6 +274,230 @@ public class FoundryRuleAuthoringAgentTests
     {
         FoundryRuleAuthoringAgent.SystemPrompt.Should().Contain("byte-for-byte verbatim");
         FoundryRuleAuthoringAgent.SystemPrompt.Should().Contain("SKIP the rule");
+    }
+
+    // ============ scope / obligation / severity (review-annotation-quality) ============
+
+    private const string ScopedInput = "Public ingress SHALL traverse a WAF.";
+
+    private static string RuleJson(string extra) => $$"""
+        {"rules":[{"topicSlug":"NET","naturalLanguage":"Public ingress SHALL traverse a WAF.",
+        "predicate":"input1.text.ToLower().Contains(\"waf\")","remediation":"r",
+        "sourceQuote":"Public ingress SHALL traverse a WAF.",{{extra}}}]}
+        """;
+
+    [Fact]
+    public async Task Scope_compiles_into_predicate_and_rule_is_not_blanket_true()
+    {
+        var json = RuleJson("""
+            "obligation":"must","scopeTerms":["Ingress","public endpoint"],"scopeDescription":"Edge traffic",
+            "relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence":["WAF named"],"severity":"Violation",
+            "severityBasis":"Unfiltered ingress exposes internet-facing services to attack"
+            """);
+        var result = await CreateAgent(new FakeChatClient(json)).AuthorAsync(RequestWith(ScopedInput));
+
+        var rule = result.Single().Rule;
+        rule.Predicate.Should().NotBe("true");
+        FoundryRuleAuthoringAgent.IsValidPredicate(rule.Predicate).Should().BeTrue();
+        rule.Predicate.Should().Contain("\"ingress\"").And.Contain("\"public endpoint\"");
+        rule.Scope!.Terms.Should().Equal("Ingress", "public endpoint");
+        rule.Obligation.Should().Be(RuleObligation.Must);
+        rule.RequiredEvidence.Should().Equal("WAF named");
+        rule.Severity.Should().Be(RuleSeverity.Violation);
+        rule.SeverityBasis.Should().Contain("internet-facing");
+        rule.Metadata["severitySource"].Should().Be("authoring-validated");
+        rule.Applicability.Should().Be(RuleApplicability.Conditional);
+        FoundryRuleAuthoringAgent.FindScopeDefect(rule).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MustWithoutImpactBasis_is_not_major_and_records_review_needed()
+    {
+        var json = RuleJson("""
+            "obligation":"must","scopeTerms":["ingress"],"relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence":["WAF named"],
+            "severity":"Critical","severityBasis":""
+            """);
+        var rule = (await CreateAgent(new FakeChatClient(json)).AuthorAsync(RequestWith(ScopedInput))).Single().Rule;
+
+        rule.Severity.Should().Be(FoundryRuleAuthoringAgent.ReviewNeededDefault).And.NotBe(RuleSeverity.Violation);
+        rule.Metadata["severitySource"].Should().Be("review-needed-default");
+        rule.SeverityBasis.Should().StartWith("review-needed");
+    }
+
+    [Theory]
+    [InlineData("Unsupported")]
+    [InlineData("")]
+    [InlineData("Bogus")]
+    public async Task UnsupportedSeverity_uses_non_major_default(string severity)
+    {
+        var json = RuleJson($$"""
+            "obligation":"must","scopeTerms":["ingress"],"relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence":["x"],"severity":"{{severity}}","severityBasis":"n/a"
+            """);
+        var rule = (await CreateAgent(new FakeChatClient(json)).AuthorAsync(RequestWith(ScopedInput))).Single().Rule;
+        rule.Severity.Should().Be(RuleSeverity.Deviation);
+        rule.SeverityBasis.Should().Contain("no supported severity");
+    }
+
+    [Fact]
+    public async Task ShouldObligation_cannot_be_major_and_is_optional()
+    {
+        var json = RuleJson("""
+            "obligation":"should","scopeTerms":["ingress"],"relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence":["x"],
+            "severity":"Violation","severityBasis":"Substantial impact on exposed customer-facing systems"
+            """);
+        var rule = (await CreateAgent(new FakeChatClient(json)).AuthorAsync(RequestWith(ScopedInput))).Single().Rule;
+        rule.Severity.Should().Be(RuleSeverity.Deviation);
+        rule.Applicability.Should().Be(RuleApplicability.Optional);
+    }
+
+    [Theory]
+    [InlineData("\"obligation\":\"must\",\"relevantExamples\":[\"scopeword ingress here\"],\"irrelevantExamples\":[\"unrelated billing text\"],\"requiredEvidence\":[\"x\"],\"severity\":\"Deviation\",\"severityBasis\":\"\"")] // no scope
+    [InlineData("\"obligation\":\"must\",\"scopeTerms\":[],\"relevantExamples\":[\"scopeword ingress here\"],\"irrelevantExamples\":[\"unrelated billing text\"],\"requiredEvidence\":[\"x\"],\"severity\":\"Deviation\",\"severityBasis\":\"\"")]
+    [InlineData("\"obligation\":\"must\",\"scopeTerms\":[\"system\"],\"relevantExamples\":[\"scopeword ingress here\"],\"irrelevantExamples\":[\"unrelated billing text\"],\"requiredEvidence\":[\"x\"],\"severity\":\"Deviation\",\"severityBasis\":\"\"")] // generic
+    [InlineData("\"obligation\":\"must\",\"scopeTerms\":[\"ab\"],\"relevantExamples\":[\"scopeword ingress here\"],\"irrelevantExamples\":[\"unrelated billing text\"],\"requiredEvidence\":[\"x\"],\"severity\":\"Deviation\",\"severityBasis\":\"\"")] // too short
+    [InlineData("\"scopeTerms\":[\"ingress\"],\"relevantExamples\":[\"scopeword ingress here\"],\"irrelevantExamples\":[\"unrelated billing text\"],\"requiredEvidence\":[\"x\"],\"severity\":\"Deviation\",\"severityBasis\":\"\"")] // no obligation
+    [InlineData("\"obligation\":\"must\",\"scopeTerms\":[\"ingress\"],\"severity\":\"Deviation\",\"severityBasis\":\"\"")] // no evidence
+    public async Task RulesWithoutDefensibleScope_areQuarantined(string extra)
+    {
+        var agent = CreateAgent(new FakeChatClient(RuleJson(extra)));
+        var result = await agent.AuthorAsync(RequestWith(ScopedInput));
+
+        result.Should().BeEmpty();
+        agent.Quarantined.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void FindScopeDefect_flags_legacy_blanket_rule()
+    {
+        var legacy = new Rule("R-1", "1.0.0", "nl", "input1.text.Contains(\"x\")", new System.Text.Json.Nodes.JsonObject(),
+            new LambdaRag.Core.Selectors.PathSelector("$.sections[*]"), RuleSeverity.Violation, AnySpan(), "q",
+            new Dictionary<string, string>());
+
+        FoundryRuleAuthoringAgent.FindScopeDefect(legacy).Should().NotBeNull();
+        FoundryRuleAuthoringAgent.FindScopeDefect(legacy with { Predicate = "input1.text.Contains(\"ingress\")" }).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task IrrelevantExampleMatchingScope_isQuarantined()
+    {
+        var json = RuleJson("""
+            "obligation":"must","scopeTerms":["ingress"],"requiredEvidence":["x"],
+            "relevantExamples":["Public ingress is terminated at the edge."],
+            "irrelevantExamples":["Invoices are paid net 30.","Ingress of new staff is covered in HR."],
+            "severity":"Deviation","severityBasis":""
+            """);
+        var agent = CreateAgent(new FakeChatClient(json));
+
+        (await agent.AuthorAsync(RequestWith(ScopedInput))).Should().BeEmpty();
+        agent.Quarantined.Single().Reason.Should().Contain("irrelevant example is matched");
+    }
+
+    [Fact]
+    public async Task RelevantExampleNotMatchingScope_isQuarantined()
+    {
+        var json = RuleJson("""
+            "obligation":"must","scopeTerms":["ingress"],"requiredEvidence":["x"],
+            "relevantExamples":["Backups run nightly."],"irrelevantExamples":["Invoices are paid net 30."],
+            "severity":"Deviation","severityBasis":""
+            """);
+        var agent = CreateAgent(new FakeChatClient(json));
+
+        (await agent.AuthorAsync(RequestWith(ScopedInput))).Should().BeEmpty();
+        agent.Quarantined.Single().Reason.Should().Contain("relevant example is not matched");
+    }
+
+    [Theory]
+    [InlineData("\"relevantExamples\":[],\"irrelevantExamples\":[\"b\"]")]
+    [InlineData("\"relevantExamples\":[\"ingress\"]")]
+    [InlineData("\"relevantExamples\":[\"ingress\",\"ingress\",\"ingress\",\"ingress\"],\"irrelevantExamples\":[\"b\"]")]
+    public async Task MissingOrOversizedExamples_areQuarantined(string examples)
+    {
+        var json = RuleJson($$"""
+            "obligation":"must","scopeTerms":["ingress"],"requiredEvidence":["x"],{{examples}},
+            "severity":"Deviation","severityBasis":""
+            """);
+        var agent = CreateAgent(new FakeChatClient(json));
+
+        (await agent.AuthorAsync(RequestWith(ScopedInput))).Should().BeEmpty();
+        agent.Quarantined.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task ValidExamples_are_recorded_on_rule_and_fingerprinted()
+    {
+        var json = RuleJson("""
+            "obligation":"must","scopeTerms":["ingress"],"requiredEvidence":["x"],
+            "relevantExamples":["Public ingress is terminated at the edge."],
+            "irrelevantExamples":["Invoices are paid net 30."],
+            "severity":"Deviation","severityBasis":""
+            """);
+        var rule = (await CreateAgent(new FakeChatClient(json)).AuthorAsync(RequestWith(ScopedInput))).Single().Rule;
+
+        rule.Examples!.Positive.Should().Equal("Public ingress is terminated at the edge.");
+        rule.Examples.Negative.Should().Equal("Invoices are paid net 30.");
+        rule.Fingerprint().Should().NotBe((rule with { Examples = null }).Fingerprint());
+    }
+
+    [Fact]
+    public void SystemPrompt_requires_scope_examples()
+    {
+        FoundryRuleAuthoringAgent.SystemPrompt.Should().Contain("relevantExamples").And.Contain("irrelevantExamples");
+    }
+
+    [Fact]
+    public void SystemPrompt_and_schema_describe_scope_and_severity_contract()
+    {
+        FoundryRuleAuthoringAgent.SystemPrompt.Should().Contain("scopeTerms")
+            .And.Contain("severityBasis").And.Contain("NOT the word");
+    }
+
+    // ============ compatibility / fingerprint ============
+
+    private static Rule LegacyRule() => new("R-1", "1.0.0", "nl", "input1.text.Contains(\"x\")",
+        new System.Text.Json.Nodes.JsonObject(), new LambdaRag.Core.Selectors.PathSelector("$.sections[*]"),
+        RuleSeverity.Violation, AnySpan(), "q", new Dictionary<string, string>());
+
+    [Fact]
+    public void LegacyRule_fingerprint_is_unchanged_by_new_optional_fields()
+    {
+        var baseline = LegacyRule();
+        (baseline with { RequiredEvidence = Array.Empty<string>(), SeverityBasis = "  " }).Fingerprint()
+            .Should().Be(baseline.Fingerprint());
+    }
+
+    [Fact]
+    public void NewFields_participate_in_fingerprint()
+    {
+        var baseline = LegacyRule();
+        var fp = baseline.Fingerprint();
+        (baseline with { Obligation = RuleObligation.Must }).Fingerprint().Should().NotBe(fp);
+        (baseline with { Scope = new RuleScope(new[] { "ingress" }) }).Fingerprint().Should().NotBe(fp);
+        (baseline with { Scope = new RuleScope(new[] { "egress" }) }).Fingerprint()
+            .Should().NotBe((baseline with { Scope = new RuleScope(new[] { "ingress" }) }).Fingerprint());
+        (baseline with { RequiredEvidence = new[] { "e" } }).Fingerprint().Should().NotBe(fp);
+        (baseline with { SeverityBasis = "impact" }).Fingerprint().Should().NotBe(fp);
+    }
+
+    [Fact]
+    public void LegacyRuleJson_without_new_fields_loads_and_roundtrips_without_emitting_them()
+    {
+        var json = LambdaRag.Core.CanonicalJson.Serialize(LegacyRule());
+        json.Should().NotContain("obligation").And.NotContain("scope").And.NotContain("severityBasis");
+
+        var back = LambdaRag.Core.CanonicalJson.Deserialize<Rule>(json)!;
+        back.Obligation.Should().BeNull();
+        back.Scope.Should().BeNull();
+        back.Fingerprint().Should().Be(LegacyRule().Fingerprint());
+
+        var full = LegacyRule() with
+        {
+            Obligation = RuleObligation.Should,
+            Scope = new RuleScope(new[] { "ingress" }, "edge"),
+            RequiredEvidence = new[] { "waf" },
+            SeverityBasis = "impact",
+        };
+        var rt = LambdaRag.Core.CanonicalJson.Deserialize<Rule>(LambdaRag.Core.CanonicalJson.Serialize(full))!;
+        rt.Fingerprint().Should().Be(full.Fingerprint());
     }
 
     // ============ helpers ============

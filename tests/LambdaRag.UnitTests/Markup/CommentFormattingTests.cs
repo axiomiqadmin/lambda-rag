@@ -36,9 +36,12 @@ public class CommentFormattingTests
         SourceSpan: new SourceSpan("doc", 0, 0, 1, null),
         EvidenceQuote: id,
         Metadata: metadata ?? new Dictionary<string, string>())
-    {
-        Predicate = predicate,
-    };
+        {
+            Predicate = predicate,
+            SeverityBasis = severity is RuleSeverity.Violation or RuleSeverity.Critical
+                ? "Documented material impact basis for this test rule."
+                : null,
+        };
 
     private static Verdict MakeVerdict(
         string ruleId,
@@ -55,7 +58,7 @@ public class CommentFormattingTests
         ErrorMessage: error,
         EvidenceQuotes: Array.Empty<string>(),
         EvaluatedAt: DateTimeOffset.UnixEpoch)
-    { RemediationText = remediation };
+        { RemediationText = remediation };
 
     [Theory]
     [InlineData("payment_terms", "Finance")]
@@ -130,6 +133,21 @@ public class CommentFormattingTests
     public void SeverityBanner_uses_AC_aligned_emoji(RuleSeverity severity, string prefix)
     {
         CommentFormatting.SeverityBanner(severity).Should().StartWith(prefix);
+    }
+
+    [Fact]
+    public void Unsupported_legacy_major_severity_uses_review_needed_default()
+    {
+        var rule = MakeRule("LEGACY-HIGH") with { SeverityBasis = null };
+        var verdict = MakeVerdict("LEGACY-HIGH");
+
+        RuleSeverityPolicy.EffectiveSeverity(rule).Should().Be(RuleSeverity.Deviation);
+        CommentFormatting.BuildBody(rule, verdict)
+            .Should().StartWith(CommentFormatting.SeverityBanner(RuleSeverity.Deviation))
+            .And.Contain("configured Violation lacks a validated impact basis");
+
+        var annotation = AnnotationFactory.BuildCommentForVerdict(verdict, rule);
+        annotation.Reasons.Should().Contain(RuleSeverityPolicy.ReviewReason(rule));
     }
 
     [Fact]
@@ -228,7 +246,12 @@ public class AnnotationFactoryFromReportBodyTests
         SourceSpan: new SourceSpan("doc", 0, 0, 1, null),
         EvidenceQuote: id,
         Metadata: new Dictionary<string, string>())
-    { Predicate = predicate };
+    {
+        Predicate = predicate,
+        SeverityBasis = sev is RuleSeverity.Violation or RuleSeverity.Critical
+            ? "Documented material impact basis for this test rule."
+            : null,
+    };
 
     private static Verdict MakeVerdict(string ruleId, VerdictOutcome outcome, string? remediation = null) => new Verdict(
         Id: ContentHash.Compose("verdict", ruleId, outcome.ToString()).Value,

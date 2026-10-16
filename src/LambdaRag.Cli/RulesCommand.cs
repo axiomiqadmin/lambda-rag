@@ -166,7 +166,14 @@ public static class RulesCommand
         }
 
         Console.WriteLine($"Rule:           {rule.Id}@{rule.Version}");
-        Console.WriteLine($"Severity:       {rule.Severity}");
+        var effectiveSeverity = RuleSeverityPolicy.EffectiveSeverity(rule);
+        Console.WriteLine(RuleSeverityPolicy.NeedsReview(rule)
+            ? $"Severity:       {effectiveSeverity} (review-needed; configured {rule.Severity})"
+            : $"Severity:       {effectiveSeverity}");
+        if (RuleSeverityPolicy.NeedsReview(rule))
+            Console.WriteLine($"Severity basis: {RuleSeverityPolicy.ReviewNeededBasis}");
+        else if (!string.IsNullOrWhiteSpace(rule.SeverityBasis))
+            Console.WriteLine($"Severity basis: {rule.SeverityBasis}");
         Console.WriteLine($"Applicability:  {rule.Applicability}");
         Console.WriteLine($"Fingerprint:    {rule.Fingerprint().Value}");
         Console.WriteLine();

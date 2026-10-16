@@ -77,7 +77,9 @@ public class SemanticPredicateEvaluationTests
         EvidenceQuote: id,
         Metadata: new Dictionary<string, string>())
     {
-        Predicate = "true",
+        // Explicit scope: a bare "true" predicate on a match-all selector no
+        // longer establishes applicability.
+        Predicate = "input1.id != \"\"",
     };
 
     private static RuleSet RuleSet(params Rule[] rules) => new(

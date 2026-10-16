@@ -12,7 +12,7 @@
   "score": 0.6666666666666666,
   "totalRules": 9,
   "passed": 6,
-  "failed": 3,
+  "failed": 0,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
@@ -171,10 +171,10 @@
       "predicateText": "input1.category == \"lawful_basis\" || input1.category == \"purpose_and_minimisation\""
     },
     {
-      "id": "lr1:01128cfa2c9d6a874528e252128e0befe7505357d58860c0d208471014e4fa91",
+      "id": "lr1:33fc1270f59be31e9d8ce195d4abdab51d9a1eb97197ac3a8deb38c49d487eae",
       "ruleId": "GDPR-G-4-Transparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"controller\") && (input1.text.Contains(\"DPO\") || input1.text.Contains(\"Data Protection Officer\") || input1.text.Contains(\"recipients\") || input1.text.Contains(\"retain\") || input1.text.Contains(\"retention\"))",
       "evaluatedInput": {
         "id": "s_00000000",
@@ -227,10 +227,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 112,
-        "charLength": 10,
+        "charStart": 0,
+        "charLength": 26,
         "headingPath": "/Privacy Notice — NovaCRM",
-        "charEnd": 122
+        "charEnd": 26
       },
       "errorMessage": "Rule 'GDPR-G-4-Transparency' failed: At collection the notice must disclose controller identity & contact, recipients, retention period(s), and data-subject rights. Missing retention period or recipients is a gap.",
       "evidenceQuotes": [
@@ -240,13 +240,11 @@
       "matchedSectionId": "s_00000000",
       "remediationText": "Update Privacy Notice — NovaCRM so it explicitly names the controller identity & contact, the recipients (or a sub-processor list URL), and the retention period for each data category, per Arts. 13–14.",
       "predicateText": "input1.category == \"transparency\"",
-      "clauseSpan": {
-        "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 28,
-        "charLength": 278,
-        "headingPath": "/Privacy Notice — NovaCRM",
-        "charEnd": 306
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:a28ac155c4e0e5763255c08c193d8b068c5f80de9d8f998ccb458db016728cab",
@@ -318,10 +316,10 @@
       "predicateText": "input1.category == \"transparency\""
     },
     {
-      "id": "lr1:76dac290badb7258537980cd30a368963d7ca76028565fe25029cf264fef2745",
+      "id": "lr1:4e5448cbf752667d05d291cbd1f326f1d83594dc59e26b663323593f51aea247",
       "ruleId": "GDPR-G-4-Transparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"controller\") && (input1.text.Contains(\"DPO\") || input1.text.Contains(\"Data Protection Officer\") || input1.text.Contains(\"recipients\") || input1.text.Contains(\"retain\") || input1.text.Contains(\"retention\"))",
       "evaluatedInput": {
         "id": "s_00000003",
@@ -389,19 +387,17 @@
       "matchedSectionId": "s_00000003",
       "remediationText": "Update 3. Recipients so it explicitly names the controller identity & contact, the recipients (or a sub-processor list URL), and the retention period for each data category, per Arts. 13–14.",
       "predicateText": "input1.category == \"transparency\"",
-      "clauseSpan": {
-        "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 1459,
-        "charLength": 266,
-        "headingPath": "/Privacy Notice — NovaCRM/3. Recipients",
-        "charEnd": 1725
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:77e3d6eab84c0a9c739363357303813a0c6afa390bfede9dfd5b62b596d73eb2",
+      "id": "lr1:7639e9a4c630eaaeaecc120ae7b5bdf50df6f2071ddf649843544e4984a92dd1",
       "ruleId": "GDPR-G-4-Transparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"controller\") && (input1.text.Contains(\"DPO\") || input1.text.Contains(\"Data Protection Officer\") || input1.text.Contains(\"recipients\") || input1.text.Contains(\"retain\") || input1.text.Contains(\"retention\"))",
       "evaluatedInput": {
         "id": "s_00000005",
@@ -464,10 +460,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 2107,
-        "charLength": 6,
+        "charStart": 2088,
+        "charLength": 15,
         "headingPath": "/Privacy Notice — NovaCRM/5. Retention",
-        "charEnd": 2113
+        "charEnd": 2103
       },
       "errorMessage": "Rule 'GDPR-G-4-Transparency' failed: At collection the notice must disclose controller identity & contact, recipients, retention period(s), and data-subject rights. Missing retention period or recipients is a gap.",
       "evidenceQuotes": [
@@ -477,13 +473,11 @@
       "matchedSectionId": "s_00000005",
       "remediationText": "Update 5. Retention so it explicitly names the controller identity & contact, the recipients (or a sub-processor list URL), and the retention period for each data category, per Arts. 13–14.",
       "predicateText": "input1.category == \"transparency\"",
-      "clauseSpan": {
-        "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 2104,
-        "charLength": 204,
-        "headingPath": "/Privacy Notice — NovaCRM/5. Retention",
-        "charEnd": 2308
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:f7b1a780b2f5dd082260c432917c89b136516995efa92d2ad63580f6aedeb62d",
@@ -700,5 +694,5 @@
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 0
+  "gaps": 3
 }

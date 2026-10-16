@@ -12,7 +12,7 @@
   "score": 0.7142857142857143,
   "totalRules": 7,
   "passed": 5,
-  "failed": 2,
+  "failed": 0,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
@@ -86,10 +86,10 @@
       "predicateText": "input1.category == \"privacy_officer\""
     },
     {
-      "id": "lr1:303667d70cf14f20f4071fbf7854a1daccdca309d1ab1944293f226876edc461",
+      "id": "lr1:e4a973e1c5061f219edec2f5fff24482046240959f24739311a6a319d0985165",
       "ruleId": "QLA25-L-2-CollectionTransparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"rectif\") || input1.text.Contains(\"access and rectification\")) && (input1.text.Contains(\"withdraw consent\") || input1.text.Contains(\"right to withdraw\"))",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -163,13 +163,11 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Expand 2. What we collect, why, and our lawful basis to inform individuals at collection of: (a) purposes, (b) the rights of access and rectification, and (c) the route to withdraw consent, per s. 8.",
       "predicateText": "input1.category == \"collection_transparency\" || input1.category == \"rights_and_complaints\"",
-      "clauseSpan": {
-        "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 806,
-        "charLength": 622,
-        "headingPath": "/Privacy Notice — NovaCRM/2. What we collect, why, and our lawful basis",
-        "charEnd": 1428
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:2bcbfd64755a6bdbb3fae3807eccd45f5b3597ce98df9d436e203bbce47f8eed",
@@ -462,10 +460,10 @@
       "predicateText": "input1.category == \"incident_handling\" || input1.text.Contains(\"register of confidentiality incidents\") || input1.text.Contains(\"incident register\")"
     },
     {
-      "id": "lr1:19ba619e647132ef3110579a5ce3a8c19a82cd55920a959a5964caf7aa3106a8",
+      "id": "lr1:804a0ac4e6119cb1685f52364efe89e030f089eddba610441c1074753ebaf7ef",
       "ruleId": "QLA25-L-6-ConsentCrossBorder",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"specific purposes\") || input1.text.Contains(\"manifest\") || input1.text.Contains(\"free and informed\")) && !(input1.text.Contains(\"By creating an account, you consent to all\") || input1.text.Contains(\"consent to all of the\"))",
       "evaluatedInput": {
         "id": "s_00000004",
@@ -535,15 +533,13 @@
       "matchedSectionId": "s_00000004",
       "remediationText": "Update 4. International transfers so consent is captured for each specific purpose (no blanket / bundled consent) and cross-border communications of PI are paired with a PIA naming the destination's protections, per s. 12 and s. 17.",
       "predicateText": "input1.category == \"consent_cross_border\"",
-      "clauseSpan": {
-        "documentId": "lr1:6cfa7ece24527beff89ccbc76ef300dcbae1feac5f16657e1a38dfc893a803a8",
-        "charStart": 1757,
-        "charLength": 321,
-        "headingPath": "/Privacy Notice — NovaCRM/4. International transfers",
-        "charEnd": 2078
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 0
+  "gaps": 2
 }

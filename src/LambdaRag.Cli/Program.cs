@@ -398,7 +398,9 @@ static class CliEntry
         var rewriteAttempted = 0;
         var rewriteEmitted = 0;
         var rewriteFindingCount = 0;
-        var rewriteSharedSpanCount = 0;
+        IReadOnlyList<RewriteSkip> rewriteSkips = Array.Empty<RewriteSkip>();
+        string? markupFailure = null;
+        MarkupApplyResult? markupResult = null;
         var rewriteFailureCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         if (emitMarkup)
         {
@@ -433,43 +435,13 @@ static class CliEntry
                                                         "           Set OPENROUTER_API_KEY (or OpenRouter:ApiKey config) "
                           + "to enable the ComplianceEditor agent.");
                     }
-                    annotations = new List<Annotation>();
-                    // Resolve clause text from the parsed document's canonical
-                    // text so the rewriter sees the *full* clause (including
-                    // bullet/numbered structure separated by '\n'), not just
-                    // the first evidence quote. Without this, multi-paragraph
-                    // clauses (e.g. a bulleted Insurance section) collapse to
-                    // a one-sentence rewrite that loses the list. Falls back
-                    // to evidence on out-of-range / empty spans.
-                    string ResolveClauseText(Verdict v)
-                    {
-                        var span = v.ClauseSpan ?? v.SourceSpan;
-                        var canonical = parsed.CanonicalText;
-                        if (span is null || span.CharLength <= 0
-                            || span.CharStart < 0
-                            || span.CharStart + span.CharLength > canonical.Length)
-                        {
-                            return v.EvidenceQuotes.Count > 0 ? v.EvidenceQuotes[0] : string.Empty;
-                        }
-                        return canonical.Substring(span.CharStart, span.CharLength);
-                    }
-
                     var failVerdicts = report.Verdicts
                         .Where(v => v.Outcome is VerdictOutcome.Fail or VerdictOutcome.Error)
                         .ToList();
-                    var repeatedFailureSpans = failVerdicts
-                        .Where(v => v.Outcome == VerdictOutcome.Fail)
-                        .Select(v => (Verdict: v, Span: v.ClauseSpan ?? v.SourceSpan))
-                        .Where(item => item.Span is not null)
-                        .GroupBy(item => (item.Span!.CharStart, item.Span!.CharLength))
-                        .Where(group => group.Count() > 1)
-                        .Select(group => group.Key)
-                        .ToHashSet();
                     rewriteFindingCount = failVerdicts.Count;
-                    rewriteSharedSpanCount = repeatedFailureSpans.Count;
 
-                    var rewrites = 0;
-                    var skipReasons = new List<(string RuleId, string Reason)>();
+                    var planner = new RewritePlanner(rewriter, ruleLookup, parsed.CanonicalText);
+                    RewritePlanResult plan = null!;
                     await AnsiConsole.Progress()
                         .AutoClear(false)
                         .HideCompleted(false)
@@ -484,80 +456,22 @@ static class CliEntry
                                 $"[bold]Processing findings[/] 0/{failVerdicts.Count}",
                                 maxValue: failVerdicts.Count);
 
-                            for (var i = 0; i < failVerdicts.Count; i++)
+                            var done = 0;
+                            plan = await planner.PlanAsync(failVerdicts, (idx, total, redlined, ruleId) =>
                             {
-                                var v = failVerdicts[i];
-                                var rule = ruleLookup.GetValueOrDefault(v.RuleId);
-                                var ruleId = v.RuleId;
                                 var truncatedId = ruleId.Length > 30 ? ruleId[..30] + "…" : ruleId;
-                                task.Description = $"[bold]Processing findings[/] {i + 1}/{failVerdicts.Count} [green]({rewrites} redlined)[/] [dim]{truncatedId}[/]";
-
-                                var comment = AnnotationFactory.BuildCommentForVerdict(v, rule);
-                                var clauseText = ResolveClauseText(v);
-
-                                if (v.Outcome != VerdictOutcome.Fail)
-                                {
-                                    skipReasons.Add((ruleId, "outcome is not Fail"));
-                                    annotations.Add(comment);
-                                    task.Increment(1);
-                                    continue;
-                                }
-                                if (string.IsNullOrWhiteSpace(clauseText))
-                                {
-                                    skipReasons.Add((ruleId, "no clause text resolved"));
-                                    annotations.Add(comment);
-                                    task.Increment(1);
-                                    continue;
-                                }
-                                if (AnnotationFactory.IsSkippableSpan(v))
-                                {
-                                    skipReasons.Add((ruleId, "title/preamble span (path=\"/\")"));
-                                    annotations.Add(comment);
-                                    task.Increment(1);
-                                    continue;
-                                }
-                                var rewriteSpan = v.ClauseSpan ?? v.SourceSpan;
-                                if (rewriteSpan is not null
-                                    && repeatedFailureSpans.Contains((rewriteSpan.CharStart, rewriteSpan.CharLength)))
-                                {
-                                    skipReasons.Add((ruleId,
-                                        "multiple failures share this clause; left as comments to avoid partial rewrites"));
-                                    annotations.Add(comment);
-                                    task.Increment(1);
-                                    continue;
-                                }
-
-                                string? rewrite = null;
-                                try
-                                {
-                                    rewriteAttempted++;
-                                    rewrite = await rewriter
-                                        .RewriteAsync(v, clauseText, rule, default)
-                                        .ConfigureAwait(false);
-                                }
-                                catch (OperationCanceledException) { throw; }
-                                catch (Exception ex)
-                                {
-                                    var kind = ex.GetType().Name;
-                                    skipReasons.Add((ruleId, $"LLM error: {kind}: {ex.Message}"));
-                                    rewriteFailureCounts[kind] = rewriteFailureCounts.GetValueOrDefault(kind) + 1;
-                                }
-
-                                if (!string.IsNullOrWhiteSpace(rewrite))
-                                {
-                                    rewrites++;
-                                    annotations.Add(AnnotationFactory.BuildReplaceAnnotation(v, comment, rewrite));
-                                }
-                                else
-                                {
-                                    if (!skipReasons.Any(s => s.RuleId == ruleId))
-                                        skipReasons.Add((ruleId, "LLM returned empty/NO_REWRITE"));
-                                    annotations.Add(comment);
-                                }
-                                task.Description = $"[bold]Processing findings[/] {i + 1}/{failVerdicts.Count} [green]({rewrites} redlined)[/] [dim]{truncatedId}[/]";
-                                task.Increment(1);
-                            }
+                                task.Description = $"[bold]Processing findings[/] {idx}/{total} [green]({redlined} redlined)[/] [dim]{Markup.Escape(truncatedId)}[/]";
+                                task.Increment(idx - 1 - done);
+                                done = idx - 1;
+                            }).ConfigureAwait(false);
+                            task.Value = failVerdicts.Count;
                         });
+                    annotations = plan.Annotations.ToList();
+                    annotations.AddRange(AnnotationFactory.BuildScopedGapAnnotations(report, ruleLookup));
+                    rewriteAttempted = plan.Attempted;
+                    foreach (var kv in plan.ErrorCounts) rewriteFailureCounts[kv.Key] = kv.Value;
+                    var skipReasons = plan.Skips;
+                    var rewrites = plan.Emitted;
 
                     Console.WriteLine($"Rewrite:   {rewrites} clause rewrite(s) emitted by {rewriter.GetType().Name}");
                     rewriteEmitted = rewrites;
@@ -583,11 +497,14 @@ static class CliEntry
                         var table = new Table()
                             .Border(TableBorder.Rounded)
                             .AddColumn("[bold]Skipped findings[/]")
-                            .AddColumn("[bold]Skip Reason[/]");
-                        foreach (var group in skipReasons.GroupBy(item => item.Reason, StringComparer.Ordinal))
+                            .AddColumn("[bold]Reason[/]");
+                        foreach (var group in skipReasons
+                            .GroupBy(item => item.Reason)
+                            .OrderBy(g => g.Key))
                             table.AddRow(group.Count().ToString(System.Globalization.CultureInfo.InvariantCulture),
-                                Markup.Escape(group.Key));
+                                Markup.Escape(group.Key.ToString()));
                         AnsiConsole.Write(table);
+                        rewriteSkips = skipReasons;
                     }
                 }
                 else
@@ -598,7 +515,17 @@ static class CliEntry
                     annotations.AddRange(AnnotationFactory.BuildPassAnnotations(report, ruleLookup));
                 var gapsSummary = AnnotationFactory.BuildGapsSummary(report, ruleLookup);
                 if (gapsSummary is not null) annotations.Insert(0, gapsSummary);
-                markup.Apply(documentPath, markupPath, annotations);
+                try
+                {
+                    markupResult = markup.Apply(documentPath, markupPath, annotations);
+                    if (markupResult.HasFailures)
+                        markupFailure = $"{markupResult.Failures.Count} annotation(s) failed during markup application";
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    markupFailure = $"{ex.GetType().Name}: {ex.Message}";
+                    markupPath = null;
+                }
             }
         }
 
@@ -637,8 +564,8 @@ static class CliEntry
                 rewriteCell = $"[red]unavailable[/] ({rewriteEmitted}/{rewriteAttempted} emitted)";
             else if (rewriteRan && rewriteAttempted == 0 && rewriteFindingCount == 0)
                 rewriteCell = "[dim]n/a — no Fail verdicts[/]";
-            else if (rewriteRan && rewriteAttempted == 0 && rewriteSharedSpanCount > 0)
-                rewriteCell = $"[yellow]0[/] emitted; {rewriteSharedSpanCount} shared clause(s) left as comments";
+            else if (rewriteRan && rewriteAttempted == 0 && rewriteSkips.Count > 0)
+                rewriteCell = $"[yellow]0[/] emitted; {rewriteSkips.Count} finding(s) left as comments (see skip reasons)";
             else if (rewriteRan && rewriteAttempted == 0)
                 rewriteCell = "[dim]no eligible rewrite candidates[/]";
             else
@@ -647,6 +574,61 @@ static class CliEntry
         }
         AnsiConsole.Write(verdictTable);
 
+        if (rewriteSkips.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            var skipTable = new Table()
+                .Border(TableBorder.Rounded)
+                .AddColumn("[bold]Rule ID[/]")
+                .AddColumn("[bold]Verdict[/]")
+                .AddColumn("[bold]Skip reason[/]")
+                .AddColumn("[bold]Detail[/]");
+            foreach (var s in rewriteSkips
+                .OrderBy(s => s.RuleId, StringComparer.Ordinal)
+                .ThenBy(s => s.VerdictId, StringComparer.Ordinal))
+                skipTable.AddRow(Markup.Escape(s.RuleId), Markup.Escape(s.VerdictId),
+                    s.Reason.ToString(), Markup.Escape(s.Detail));
+            AnsiConsole.Write(skipTable);
+            AnsiConsole.MarkupLine(
+                $"[yellow]{rewriteSkips.Count} finding(s) kept as comment only; no tracked change was emitted for them.[/]");
+        }
+
+        if (markupFailure is not null)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.Write(new Panel(new Markup(
+                    $"[bold]Markup application failed or was incomplete.[/]\n\n{Markup.Escape(markupFailure)}"))
+                .Header("[red]✖ Markup failure[/]")
+                .Border(BoxBorder.Rounded)
+                .BorderColor(Color.Red));
+        }
+        if (markupResult is not null)
+        {
+            var status = markupResult.IsClean
+                ? $"clean ({markupResult.AppliedCount}/{markupResult.Results.Count} applied)"
+                : $"partial ({markupResult.AppliedCount}/{markupResult.Results.Count} applied)";
+            AnsiConsole.MarkupLine($"Markup application: {Markup.Escape(status)}");
+            if (!markupResult.IsClean)
+            {
+                var markupTable = new Table()
+                    .Border(TableBorder.Rounded)
+                    .AddColumn("[bold]Annotation[/]")
+                    .AddColumn("[bold]Status[/]")
+                    .AddColumn("[bold]Rules[/]")
+                    .AddColumn("[bold]Reason[/]")
+                    .AddColumn("[bold]Detail[/]");
+                foreach (var result in markupResult.Skips)
+                {
+                    markupTable.AddRow(
+                        Markup.Escape(result.AnnotationId),
+                        result.Disposition.ToString(),
+                        Markup.Escape(string.Join(", ", result.RuleIds)),
+                        Markup.Escape(result.Reason ?? string.Join("; ", result.AnnotationReasons)),
+                        Markup.Escape(result.Detail ?? string.Empty));
+                }
+                AnsiConsole.Write(markupTable);
+            }
+        }
         // Rewrite status callout — surfaces LLM unavailability with reason.
         if (rewriteRequested && rewriteUnavailableReason is not null)
         {
@@ -695,6 +677,12 @@ static class CliEntry
             fileTable.AddRow("Markup", Markup.Escape(Path.GetFullPath(markupPath)));
         if (fileTable.Rows.Count > 0)
             AnsiConsole.Write(fileTable);
+
+        if (markupFailure is not null)
+        {
+            Console.Error.WriteLine($"error: markup application failed or was incomplete: {markupFailure}");
+            return 3;
+        }
 
         return 0;
     }

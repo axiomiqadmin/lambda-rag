@@ -65,6 +65,36 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
     /// authoring provenance (useful for downstream audit).</summary>
     public const string AuthoringAgentMetadataKey = "authoringAgent";
 
+    /// <summary>Metadata key recording why the rule's severity was assigned.</summary>
+    public const string SeverityBasisMetadataKey = "severityBasis";
+
+    /// <summary>Metadata key: <c>authoring-validated</c> or <c>review-needed-default</c>.</summary>
+    public const string SeveritySourceMetadataKey = "severitySource";
+
+    /// <summary>Non-MAJOR severity used when authoring cannot support a severity.</summary>
+    public const RuleSeverity ReviewNeededDefault = RuleSeverityPolicy.ReviewNeededDefault;
+
+    private const int MinSeverityBasisLength = RuleSeverityPolicy.MinimumImpactBasisLength;
+    private const int MinScopeTermLength = 3;
+    private const int MaxScopeTerms = 8;
+    internal const int MinExamples = 1;
+    internal const int MaxExamples = 3;
+    internal const int MaxExampleLength = 400;
+
+    private static readonly HashSet<string> GenericScopeTerms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "the", "and", "system", "systems", "document", "documents", "service", "services",
+        "all", "any", "must", "shall", "should", "section", "data", "application",
+    };
+
+    private readonly List<(string Topic, string Reason)> _quarantined = new();
+
+    /// <summary>Candidates rejected for lacking schema/scope validity, for audit.</summary>
+    public IReadOnlyList<(string Topic, string Reason)> Quarantined
+    {
+        get { lock (_quarantined) return _quarantined.ToArray(); }
+    }
+
     // Pipeline-wide gate and schedule so multiple DI instances share one quota.
     private static readonly SemaphoreSlim GlobalCallGate = new(initialCount: 1, maxCount: 1);
     private static DateTimeOffset _nextCallAt;
@@ -95,8 +125,21 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
           "naturalLanguage": "<the clause, verbatim or lightly normalized>",
           "predicate": "<a boolean expression in the CONSTRAINED DSL below>",
           "remediation": "<one sentence telling the author what to change>",
-          "sourceQuote": "<byte-for-byte verbatim substring of the input section text — no paraphrasing, no ellipsis, no rewording. Must appear character-identical inside the input. If you cannot find a verbatim excerpt <= 400 chars that grounds the clause, SKIP the rule.>"
+          "sourceQuote": "<byte-for-byte verbatim substring of the input section text — no paraphrasing, no ellipsis, no rewording. Must appear character-identical inside the input. If you cannot find a verbatim excerpt <= 400 chars that grounds the clause, SKIP the rule.>",
+          "obligation": "<must | should | may — the strength of the source clause only>",
+          "scopeTerms": ["<1-8 distinctive lowercase words/phrases (>= 3 chars) a document section must contain to be IN SCOPE for this clause, e.g. 'ingress', 'waf'. Never generic words like 'system' or 'document'. If you cannot state a defensible scope, SKIP the rule.>"],
+          "scopeDescription": "<one sentence: when does this clause apply?>",
+          "relevantExamples": ["<1-3 short (<= 400 chars) invented section excerpts that ARE in scope; each must contain at least one scopeTerm>"],
+          "irrelevantExamples": ["<1-3 short (<= 400 chars) invented section excerpts that are NOT in scope (e.g. unrelated topics); none may contain any scopeTerm>"],
+          "requiredEvidence": ["<what an in-scope section must state to comply>"],
+          "severity": "<Suggestion | Deviation | Violation | Critical | Unsupported>",
+          "severityBasis": "<the concrete impact (security, legal, financial, availability) that justifies the severity>"
         }
+
+        SEVERITY: severity reflects the impact of non-compliance, NOT the word
+        MUST/SHALL. Use Violation or Critical only with a concrete impact stated
+        in severityBasis. If impact is not supported by the policy text, emit
+        "Unsupported" (it is recorded as a review-needed, non-major finding).
 
         CONSTRAINED PREDICATE DSL — the ONLY allowed constructs:
           input1.text.Contains("literal")
@@ -227,6 +270,7 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                 _log.LogInformation(
                     "Dropping authoring candidate (topic={Topic}) in {DocId}@{Start}: {Reason}",
                     candidate?.TopicSlug, request.SourceSpan.DocumentId, request.SourceSpan.CharStart, reason);
+                lock (_quarantined) _quarantined.Add((candidate?.TopicSlug ?? string.Empty, reason));
                 continue;
             }
 
@@ -373,13 +417,21 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
               "items": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["topicSlug", "naturalLanguage", "predicate", "remediation", "sourceQuote"],
+                "required": ["topicSlug", "naturalLanguage", "predicate", "remediation", "sourceQuote", "obligation", "scopeTerms", "requiredEvidence", "relevantExamples", "irrelevantExamples", "severity", "severityBasis"],
                 "properties": {
                   "topicSlug":       { "type": "string", "minLength": 3, "maxLength": 6 },
                   "naturalLanguage": { "type": "string", "minLength": 1 },
                   "predicate":       { "type": "string", "minLength": 1 },
                   "remediation":     { "type": "string" },
-                  "sourceQuote":     { "type": "string", "minLength": 1, "maxLength": 400 }
+                  "sourceQuote":     { "type": "string", "minLength": 1, "maxLength": 400 },
+                  "obligation":      { "type": "string", "enum": ["must", "should", "may"] },
+                  "scopeTerms":      { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3 } },
+                  "scopeDescription": { "type": "string" },
+                  "requiredEvidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+                  "relevantExamples":   { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+                  "irrelevantExamples": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
+                  "severity":        { "type": "string", "enum": ["Suggestion", "Deviation", "Violation", "Critical", "Unsupported"] },
+                  "severityBasis":   { "type": "string" }
                 }
               }
             }
@@ -423,9 +475,27 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                 Predicate = (string?)o["predicate"] ?? string.Empty,
                 Remediation = (string?)o["remediation"] ?? string.Empty,
                 SourceQuote = (string?)o["sourceQuote"] ?? string.Empty,
+                Obligation = (string?)o["obligation"] ?? string.Empty,
+                ScopeTerms = ReadStrings(o["scopeTerms"]),
+                ScopeDescription = (string?)o["scopeDescription"] ?? string.Empty,
+                RequiredEvidence = ReadStrings(o["requiredEvidence"]),
+                RelevantExamples = ReadStrings(o["relevantExamples"]),
+                IrrelevantExamples = ReadStrings(o["irrelevantExamples"]),
+                Severity = (string?)o["severity"] ?? string.Empty,
+                SeverityBasis = (string?)o["severityBasis"] ?? string.Empty,
             });
         }
         return list;
+    }
+
+    private static List<string> ReadStrings(JsonNode? node)
+    {
+        var result = new List<string>();
+        if (node is JsonArray arr)
+            foreach (var item in arr)
+                if (item is JsonValue v && v.TryGetValue<string>(out var s))
+                    result.Add(s);
+        return result;
     }
 
     /// <summary>
@@ -449,6 +519,13 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             reason = "sourceQuote is not a verbatim substring of the input chunk (defensibility violation)";
             return false;
         }
+        if (ParseObligation(dto.Obligation) is null) { reason = $"missing or invalid obligation '{dto.Obligation}'"; return false; }
+        var scopeDefect = ValidateScopeTerms(NormalizeScopeTerms(dto.ScopeTerms));
+        if (scopeDefect is not null) { reason = $"no defensible scope: {scopeDefect}"; return false; }
+        if (dto.RequiredEvidence.All(string.IsNullOrWhiteSpace)) { reason = "missing requiredEvidence"; return false; }
+        var exampleDefect = ValidateScopeExamples(
+            NormalizeScopeTerms(dto.ScopeTerms), dto.RelevantExamples, dto.IrrelevantExamples);
+        if (exampleDefect is not null) { reason = $"scope example validation failed: {exampleDefect}"; return false; }
         return true;
     }
 
@@ -499,10 +576,16 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         // Placeholder ID — the extraction pipeline stamps the final counter.
         var provisionalId = $"{request.RuleIdPrefix}{topic}";
 
+        var obligation = ParseObligation(dto.Obligation)!.Value;
+        var (severity, severityBasis, reviewNeeded) = ResolveSeverity(dto, obligation);
+        var scopeTerms = NormalizeScopeTerms(dto.ScopeTerms);
+
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             [TopicSlugMetadataKey] = topic,
             [AuthoringAgentMetadataKey] = nameof(FoundryRuleAuthoringAgent),
+            [SeverityBasisMetadataKey] = severityBasis,
+            [SeveritySourceMetadataKey] = reviewNeeded ? "review-needed-default" : "authoring-validated",
         };
 
         float[]? embedding = null;
@@ -515,6 +598,14 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             _log.LogInformation(ex, "Embedding failed for chunk; rule will be emitted without SourceEmbedding.");
         }
 
+        // Scope terms compile into the deterministic applicability gate.
+        var predicate = string.Join(" || ", scopeTerms.Select(t => $"input1.text.ToLower().Contains(\"{t.ToLowerInvariant()}\")"));
+        var applicability = DeterministicMockAuthoringAgent.InferApplicability(dto.NaturalLanguage);
+        if (obligation != RuleObligation.Must)
+            applicability = RuleApplicability.Optional;
+        else if (applicability == RuleApplicability.Mandatory)
+            applicability = RuleApplicability.Conditional; // scope is authored, so absence of scope is not a gap
+
         return new Rule(
             Id: provisionalId,
             Version: "1.0.0",
@@ -522,17 +613,130 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             Lambda: dto.Predicate,
             AppliesToSchema: SectionTextSchema(),
             Selector: new PathSelector("$.sections[*]"),
-            Severity: RuleSeverity.Violation,
+            Severity: severity,
             SourceSpan: request.SourceSpan,
             EvidenceQuote: dto.SourceQuote,
             Metadata: metadata)
         {
-            Predicate = "true",
-            Applicability = DeterministicMockAuthoringAgent.InferApplicability(dto.NaturalLanguage),
+            Predicate = predicate,
+            Applicability = applicability,
+            Obligation = obligation,
+            Scope = new RuleScope(scopeTerms, string.IsNullOrWhiteSpace(dto.ScopeDescription) ? null : dto.ScopeDescription.Trim()),
+            RequiredEvidence = dto.RequiredEvidence.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList(),
+            SeverityBasis = severityBasis,
+            Examples = new RuleExamples(
+                dto.RelevantExamples.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList(),
+                dto.IrrelevantExamples.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList()),
             Remediation = string.IsNullOrWhiteSpace(dto.Remediation) ? null : dto.Remediation,
             SourceContent = request.SourceContent,
             SourceEmbedding = embedding,
         };
+    }
+
+    /// <summary>
+    /// Deterministic severity policy. Severity is taken from validated
+    /// authoring output only when impact is justified: Violation/Critical need
+    /// a substantive <c>severityBasis</c> and a <c>must</c> obligation.
+    /// MUST/SHALL alone never yields Violation/Critical. Anything else falls to
+    /// the explicit non-MAJOR <see cref="ReviewNeededDefault"/>.
+    /// </summary>
+    internal static (RuleSeverity Severity, string Basis, bool ReviewNeeded) ResolveSeverity(
+        ExtractedRuleDto dto, RuleObligation obligation)
+    {
+        var basis = dto.SeverityBasis?.Trim() ?? string.Empty;
+        var declared = ParseSeverity(dto.Severity);
+
+        if (declared is null)
+            return (ReviewNeededDefault, "review-needed: no supported severity in authoring output", true);
+
+        if (declared is RuleSeverity.Violation or RuleSeverity.Critical)
+        {
+            if (basis.Length < MinSeverityBasisLength)
+                return (ReviewNeededDefault, $"review-needed: {declared} declared without an impact basis", true);
+            if (obligation != RuleObligation.Must)
+                return (ReviewNeededDefault, $"review-needed: {declared} declared for a non-mandatory obligation ({obligation})", true);
+        }
+        else if (basis.Length == 0)
+        {
+            basis = $"authoring-declared {declared}; obligation={obligation}";
+        }
+
+        if (declared == RuleSeverity.Deviation && basis.Length == 0)
+            basis = "authoring-declared Deviation";
+        return (declared.Value, basis, false);
+    }
+
+    internal static RuleObligation? ParseObligation(string? s)
+        => Enum.TryParse<RuleObligation>(s?.Trim(), ignoreCase: true, out var o) && Enum.IsDefined(o) ? o : null;
+
+    internal static RuleSeverity? ParseSeverity(string? s)
+        => Enum.TryParse<RuleSeverity>(s?.Trim(), ignoreCase: true, out var v) && Enum.IsDefined(v) ? v : null;
+
+    internal static IReadOnlyList<string> NormalizeScopeTerms(IEnumerable<string>? terms)
+        => (terms ?? Array.Empty<string>())
+            .Select(t => t?.Trim() ?? string.Empty)
+            .Where(t => t.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>
+    /// Returns a reason when a (possibly already-published) rule lacks a
+    /// defensible scope — e.g. a selector that matches every section with a
+    /// <c>true</c> predicate and no scope conditions. Null when defensible.
+    /// </summary>
+    public static string? FindScopeDefect(Rule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        var scopeTerms = NormalizeScopeTerms(rule.Scope?.Terms);
+        var alwaysTrue = string.IsNullOrWhiteSpace(rule.Predicate)
+            || string.Equals(rule.Predicate.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+        if (scopeTerms.Count == 0 && alwaysTrue)
+            return "no scope conditions and predicate is always true (applies to every selected section)";
+        if (scopeTerms.Count > 0 && alwaysTrue)
+            return "scope conditions are not enforced by the applicability predicate";
+        return null;
+    }
+
+    /// <summary>
+    /// Deterministic pre-publish check of the scope gate against authored
+    /// example sections, using the same case-insensitive containment the
+    /// compiled predicate uses at runtime. Every relevant example must be in
+    /// scope and no irrelevant example may be. No LLM or similarity score
+    /// decides the outcome.
+    /// </summary>
+    internal static string? ValidateScopeExamples(
+        IReadOnlyList<string> scopeTerms,
+        IReadOnlyList<string>? relevant,
+        IReadOnlyList<string>? irrelevant)
+    {
+        var rel = (relevant ?? Array.Empty<string>()).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+        var irr = (irrelevant ?? Array.Empty<string>()).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+        if (rel.Count < MinExamples || irr.Count < MinExamples) return "relevant and irrelevant examples are both required";
+        if (rel.Count > MaxExamples || irr.Count > MaxExamples) return $"more than {MaxExamples} examples";
+        if (rel.Concat(irr).Any(e => e.Length > MaxExampleLength)) return $"example longer than {MaxExampleLength} characters";
+
+        static bool InScope(IReadOnlyList<string> terms, string text)
+            => terms.Any(t => text.Contains(t, StringComparison.OrdinalIgnoreCase));
+
+        var missed = rel.FirstOrDefault(e => !InScope(scopeTerms, e));
+        if (missed is not null) return "relevant example is not matched by the scope terms";
+        var leaked = irr.FirstOrDefault(e => InScope(scopeTerms, e));
+        if (leaked is not null) return "irrelevant example is matched by the scope terms";
+        return null;
+    }
+
+    private static string? ValidateScopeTerms(IReadOnlyList<string> terms)
+    {
+        if (terms.Count == 0) return "missing scope conditions (scopeTerms)";
+        if (terms.Count > MaxScopeTerms) return $"too many scope terms (>{MaxScopeTerms})";
+        foreach (var t in terms)
+        {
+            if (t.Length < MinScopeTermLength) return $"scope term '{t}' is too short to be defensible";
+            if (t.IndexOfAny(new[] { '"', '\\', '\r', '\n' }) >= 0) return $"scope term '{t}' contains illegal characters";
+            if (GenericScopeTerms.Contains(t)) return $"scope term '{t}' is too generic to establish scope";
+        }
+        return null;
     }
 
     private static JsonObject SectionTextSchema() => new()
@@ -553,5 +757,13 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         public string Predicate { get; set; } = string.Empty;
         public string Remediation { get; set; } = string.Empty;
         public string SourceQuote { get; set; } = string.Empty;
+        public string Obligation { get; set; } = string.Empty;
+        public List<string> ScopeTerms { get; set; } = new();
+        public string ScopeDescription { get; set; } = string.Empty;
+        public List<string> RequiredEvidence { get; set; } = new();
+        public List<string> RelevantExamples { get; set; } = new();
+        public List<string> IrrelevantExamples { get; set; } = new();
+        public string Severity { get; set; } = string.Empty;
+        public string SeverityBasis { get; set; } = string.Empty;
     }
 }

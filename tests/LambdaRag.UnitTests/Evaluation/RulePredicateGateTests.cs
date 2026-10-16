@@ -138,14 +138,17 @@ public class RulePredicateGateTests
 
         report.Verdicts.Should().HaveCount(1);
         var v = report.Verdicts.Single();
-        v.Outcome.Should().Be(VerdictOutcome.Fail);
+        // The required literal is absent: an in-scope omission, not a contradiction.
+        v.Outcome.Should().Be(VerdictOutcome.Gap);
+        v.FindingKind.Should().Be(FindingKinds.MissingRequirement);
         v.RemediationText.Should().Be("Replace the p1 clause: pay within 30 days.");
     }
 
     [Fact]
-    public async Task DefaultPredicateTrue_AppliesToEverySelectorMatch()
+    public async Task DefaultPredicateTrue_DoesNotFailUnrelatedSelectorMatches()
     {
-        // Predicate omitted (defaults to "true") — every selector match is evaluated.
+        // Predicate omitted (defaults to "true") on a match-all selector is not
+        // scope: the unrelated section must not produce a finding.
         var rule = new Rule(
             Id: "ALL-001",
             Version: "1.0.0",
@@ -163,9 +166,9 @@ public class RulePredicateGateTests
 
         var report = await Build().EvaluateAsync(RuleSet(rule), doc);
 
-        report.Verdicts.Should().HaveCount(2);
-        report.Verdicts.Count(v => v.Outcome == VerdictOutcome.Pass).Should().Be(1);
-        report.Verdicts.Count(v => v.Outcome == VerdictOutcome.Fail).Should().Be(1);
+        report.Verdicts.Should().HaveCount(1);
+        report.Verdicts.Single().Outcome.Should().Be(VerdictOutcome.Pass);
+        report.Verdicts.Single().MatchedSectionId.Should().Be("a");
     }
 
     [Fact]

@@ -12,12 +12,12 @@
   "score": 0,
   "totalRules": 9,
   "passed": 0,
-  "failed": 5,
+  "failed": 2,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
     {
-      "id": "lr1:3ed657357c5dafc8d4c1dc3dc4650c589f97b1f3f0dbe97493cd62bd6f0a7df3",
+      "id": "lr1:2117054b322b88f50d971b6f22c7300501f5250e54f877348b5f144669de4dbb",
       "ruleId": "HIPAA-H-1-RiskAnalysis",
       "ruleSetVersion": "1.0.0",
       "outcome": "Fail",
@@ -73,10 +73,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:ab4506c9dfb5b06d39081b5bf8a0a25f2cf538ff6221ddcd7c6efa0cece4a79c",
-        "charStart": 1472,
-        "charLength": 15,
+        "charStart": 1488,
+        "charLength": 14,
         "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./6. Risk assessment",
-        "charEnd": 1487
+        "charEnd": 1502
       },
       "errorMessage": "Rule 'HIPAA-H-1-RiskAnalysis' failed: The entity must conduct an accurate and thorough, periodic, documented risk analysis covering all systems handling ePHI. A one-time or single-system assessment is a gap.",
       "evidenceQuotes": [
@@ -92,7 +92,12 @@
         "charLength": 125,
         "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./6. Risk assessment",
         "charEnd": 1571
-      }
+      },
+      "findingKind": "contradiction",
+      "anchorKind": "contradictory_text",
+      "clauseKind": "paragraph",
+      "rewriteEligible": true,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:d2749e28e97103a2a376b9f3668a99279d9fe448a3b2cb41338a491bd746bc72",
@@ -117,10 +122,10 @@
       "predicateText": "input1.category == \"sanction_policy\""
     },
     {
-      "id": "lr1:b7ce47ac7a2cf4461ab1fd85580fbdc3827f8de4121b0fec4c8a00d000a08f6b",
+      "id": "lr1:b51ea2b594138fd882c2b8720e6736ec90f424fbbed07c76eded5b91298b7fae",
       "ruleId": "HIPAA-H-3-WorkforceAccess",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"least privilege\") || input1.text.Contains(\"role-based\")) && (input1.text.Contains(\"deprovisioning\") || input1.text.Contains(\"revoked\") || input1.text.Contains(\"termination\") || input1.text.Contains(\"separation\"))",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -192,13 +197,11 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Update 2. Access management to describe role-based access on least privilege AND a documented termination/deprovisioning workflow tied to HR, per §164.308(a)(3)–(a)(4).",
       "predicateText": "input1.category == \"workforce_access\"",
-      "clauseSpan": {
-        "documentId": "lr1:ab4506c9dfb5b06d39081b5bf8a0a25f2cf538ff6221ddcd7c6efa0cece4a79c",
-        "charStart": 620,
-        "charLength": 362,
-        "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./2. Access management",
-        "charEnd": 982
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:958b80376395af6892f252817b4faf8e13facf09d1ce9b0fb0be181fd24969d9",
@@ -278,13 +281,18 @@
         "charLength": 131,
         "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./5. Security training",
         "charEnd": 1422
-      }
+      },
+      "findingKind": "contradiction",
+      "anchorKind": "contradictory_text",
+      "clauseKind": "paragraph",
+      "rewriteEligible": true,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:3083102f2d6177d4b9926578c7cfbe43b2f5a36d36100a6b6a4a644963e73432",
+      "id": "lr1:74faae513a0771486dbecb26b1c7b5c64605f9087407bae011e673e6879e01fc",
       "ruleId": "HIPAA-H-5-ContingencyPlan",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"backup\") || input1.text.Contains(\"Backup\")) && (input1.text.Contains(\"disaster recovery\") || input1.text.Contains(\"DR plan\") || input1.text.Contains(\"RTO\")) && (input1.text.Contains(\"emergency-mode\") || input1.text.Contains(\"emergency mode\"))",
       "evaluatedInput": {
         "id": "s_00000001",
@@ -350,19 +358,17 @@
       "matchedSectionId": "s_00000001",
       "remediationText": "Expand 1. Purpose to cover all three components: data backup plan, disaster recovery plan with defined RTO/RPO, and emergency-mode operation plan, per §164.308(a)(7).",
       "predicateText": "input1.category == \"contingency_plan\"",
-      "clauseSpan": {
-        "documentId": "lr1:ab4506c9dfb5b06d39081b5bf8a0a25f2cf538ff6221ddcd7c6efa0cece4a79c",
-        "charStart": 395,
-        "charLength": 199,
-        "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./1. Purpose",
-        "charEnd": 594
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:5f9f54d63cd87226577e9a76f029cd5966d3a3a8c1dd63421cc5e3ddfc415a01",
+      "id": "lr1:2a96001bc117744d6c1089db2b86ee9030ca5b6294411b3825ad9dd6422183fb",
       "ruleId": "HIPAA-H-5-ContingencyPlan",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"backup\") || input1.text.Contains(\"Backup\")) && (input1.text.Contains(\"disaster recovery\") || input1.text.Contains(\"DR plan\") || input1.text.Contains(\"RTO\")) && (input1.text.Contains(\"emergency-mode\") || input1.text.Contains(\"emergency mode\"))",
       "evaluatedInput": {
         "id": "s_00000004",
@@ -417,10 +423,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:ab4506c9dfb5b06d39081b5bf8a0a25f2cf538ff6221ddcd7c6efa0cece4a79c",
-        "charStart": 1232,
-        "charLength": 6,
+        "charStart": 1149,
+        "charLength": 13,
         "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./4. Backups",
-        "charEnd": 1238
+        "charEnd": 1162
       },
       "errorMessage": "Rule 'HIPAA-H-5-ContingencyPlan' failed: The entity must address backup, disaster recovery, AND emergency-mode operation. Backups alone are not sufficient.",
       "evidenceQuotes": [
@@ -430,13 +436,11 @@
       "matchedSectionId": "s_00000004",
       "remediationText": "Expand 4. Backups to cover all three components: data backup plan, disaster recovery plan with defined RTO/RPO, and emergency-mode operation plan, per §164.308(a)(7).",
       "predicateText": "input1.category == \"contingency_plan\"",
-      "clauseSpan": {
-        "documentId": "lr1:ab4506c9dfb5b06d39081b5bf8a0a25f2cf538ff6221ddcd7c6efa0cece4a79c",
-        "charStart": 1163,
-        "charLength": 102,
-        "headingPath": "/Information Security Policy — Acme Telehealth Platform, Inc./4. Backups",
-        "charEnd": 1265
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:6ac373e4475b35c99442fe0346c1695dfe9c3a2a5a1a1b75dfc76cc39637eda0",
@@ -506,5 +510,5 @@
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 4
+  "gaps": 7
 }

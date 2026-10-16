@@ -12,7 +12,7 @@
   "score": 0.6,
   "totalRules": 5,
   "passed": 3,
-  "failed": 2,
+  "failed": 1,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
@@ -244,7 +244,7 @@
       "predicateText": "input1.category == \"encryption_at_rest\""
     },
     {
-      "id": "lr1:9cd1deff9ebf123d581b1ae5f0e1bdf5131edbcbbc71ff01d8a50376d59dbc21",
+      "id": "lr1:202d7a9e12f4525d909a48656fb483acd3f3b9c1ddc607b45b946b7deb70bccc",
       "ruleId": "GC-CG-07-TLS",
       "ruleSetVersion": "1.0.0",
       "outcome": "Fail",
@@ -306,10 +306,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:0794c4cfbc2dd3c1db7daacca0430c6a9d3356a629de2669032cc6ef3066bde3",
-        "charStart": 1974,
+        "charStart": 2034,
         "charLength": 7,
         "headingPath": "/Solution Architecture — Departmental Modelling Workbench (Protected B IaaS)/5. TLS 1.2 Configuration",
-        "charEnd": 1981
+        "charEnd": 2041
       },
       "errorMessage": "Rule 'GC-CG-07-TLS' failed: Data in transit must be encrypted by default using TLS 1.2 or higher. The architecture must explicitly commit to TLS 1.2+ for all cloud services and external communications.",
       "evidenceQuotes": [
@@ -325,13 +325,18 @@
         "charLength": 302,
         "headingPath": "/Solution Architecture — Departmental Modelling Workbench (Protected B IaaS)/5. TLS 1.2 Configuration",
         "charEnd": 2167
-      }
+      },
+      "findingKind": "contradiction",
+      "anchorKind": "contradictory_text",
+      "clauseKind": "paragraph",
+      "rewriteEligible": true,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:1cf8efdab0a63b202b836da073e0e82ab016938c09541e2c057179eb631e7c16",
+      "id": "lr1:39c14a7110cffb5b32f2050fde353cd4e525038ae6f8e02abb0497023f32bf79",
       "ruleId": "GC-CG-11-AuditLogging",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"audit log\") && (input1.text.Contains(\"365 days\") || input1.text.Contains(\"12 months\") || input1.text.Contains(\"3 years\") || input1.text.Contains(\"7 years\") || input1.text.Contains(\"year\")) && (input1.text.Contains(\"sign-in\") || input1.text.Contains(\"configuration change\") || input1.text.Contains(\"resource provisioning\"))",
       "evaluatedInput": {
         "id": "s_00000006",
@@ -390,10 +395,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:0794c4cfbc2dd3c1db7daacca0430c6a9d3356a629de2669032cc6ef3066bde3",
-        "charStart": 2214,
-        "charLength": 9,
+        "charStart": 2173,
+        "charLength": 24,
         "headingPath": "/Solution Architecture — Departmental Modelling Workbench (Protected B IaaS)/6. Audit Log Strategy",
-        "charEnd": 2223
+        "charEnd": 2197
       },
       "errorMessage": "Rule 'GC-CG-11-AuditLogging' failed: Audit logging must be enabled for the cloud environment and workloads, with sign-in, configuration-change, and resource-provisioning events captured, and a defined retention period.",
       "evidenceQuotes": [
@@ -403,15 +408,13 @@
       "matchedSectionId": "s_00000006",
       "remediationText": "Update 6. Audit Log Strategy to commit to a defined retention period (e.g., 365 days minimum) and to capture sign-in, configuration-change, and resource-provisioning events, per GC Cloud Guardrail 11 and the GC Event Logging Guidance.",
       "predicateText": "input1.category == \"audit_logging\"",
-      "clauseSpan": {
-        "documentId": "lr1:0794c4cfbc2dd3c1db7daacca0430c6a9d3356a629de2669032cc6ef3066bde3",
-        "charStart": 2199,
-        "charLength": 369,
-        "headingPath": "/Solution Architecture — Departmental Modelling Workbench (Protected B IaaS)/6. Audit Log Strategy",
-        "charEnd": 2568
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 0
+  "gaps": 1
 }

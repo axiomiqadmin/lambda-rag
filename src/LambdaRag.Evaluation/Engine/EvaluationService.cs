@@ -216,6 +216,7 @@ public sealed class EvaluationService
 
             var emittedForRule = 0;
             var floorFilteredSections = 0;
+            var outOfScopeSections = 0;
             foreach (var section in matches)
             {
                 // Strict-superset pre-filter: if a candidate filter is wired up
@@ -312,8 +313,19 @@ public sealed class EvaluationService
                     continue;
                 }
 
-                var verdict = await EvaluateRuleAsync(rule, ruleSet, section, bindingMap, bindingRecords)
+                var scopeBasis = DetermineScopeBasis(rule, section);
+                if (scopeBasis == ScopeBases.AuthoredScopeNotMet)
+                {
+                    outOfScopeSections++;
+                    continue;
+                }
+                var verdict = await EvaluateRuleAsync(rule, ruleSet, section, scopeBasis, bindingMap, bindingRecords)
                     .ConfigureAwait(false);
+                if (verdict is null)
+                {
+                    outOfScopeSections++;
+                    continue;
+                }
                 verdicts.Add(verdict);
                 emittedForRule++;
             }
@@ -328,15 +340,18 @@ public sealed class EvaluationService
                 // outcome only for the applicability-floor path so the
                 // classic "selector matched nothing" case still emits Gap
                 // for Mandatory rules exactly as before.
-                var noMatchOutcome = floorFilteredSections > 0
+                var scopeFiltered = floorFilteredSections + outOfScopeSections;
+                var noMatchOutcome = scopeFiltered > 0
                     ? VerdictOutcome.NotApplicable
                     : NoMatchOutcome(rule);
-                var noMatchRemediation = floorFilteredSections > 0
+                var noMatchRemediation = scopeFiltered > 0
                     ? null
                     : NoMatchRemediation(rule);
                 var noMatchError = floorFilteredSections > 0
                     ? $"applicability_floor:no_relevant_section (filtered {floorFilteredSections} candidate section(s))"
-                    : null;
+                    : outOfScopeSections > 0
+                        ? $"scope:not_established (no in-scope section among {outOfScopeSections} candidate section(s))"
+                        : null;
                 verdicts.Add(BuildVerdict(
                     rule, ruleSet,
                     outcome: noMatchOutcome,
@@ -406,10 +421,11 @@ public sealed class EvaluationService
         }
     }
 
-    private async Task<Verdict> EvaluateRuleAsync(
+    private async Task<Verdict?> EvaluateRuleAsync(
         Rule rule,
         RuleSet ruleSet,
         MatchedSection section,
+        string? scopeBasis,
         IReadOnlyDictionary<string, IReadOnlyList<TokenMatch>>? bindingMap = null,
         IReadOnlyList<BindingRecord>? bindingRecords = null)
     {
@@ -488,20 +504,35 @@ public sealed class EvaluationService
 
             SourceSpan span;
             SourceSpan? clauseSpan = null;
+            FindingInfo? finding = null;
             if (outcome == VerdictOutcome.Fail)
             {
-                var (narrow, clause) = RefineSpans(rule, section);
-                span = narrow;
-                clauseSpan = clause;
+                // A lambda failure is only a finding when the rule is
+                // established as in scope for this section. An unscoped
+                // broad rule that fails on an unrelated section is silent.
+                if (scopeBasis is null) return null;
+
+                var resolution = ResolveFinding(rule, section);
+                span = resolution.Evidence;
+                clauseSpan = resolution.Clause;
+                finding = resolution.Info;
+                if (resolution.Info.FindingKind == FindingKinds.MissingRequirement)
+                    outcome = VerdictOutcome.Gap;
             }
             else
             {
                 span = section.Span;
             }
-            var remediationText = outcome == VerdictOutcome.Fail
+            var remediationText = outcome is VerdictOutcome.Fail or VerdictOutcome.Gap
                 ? RemediationRenderer.Render(rule.Remediation, rule, section)
                 : null;
-            return BuildVerdict(
+            if (remediationText is null
+                && outcome == VerdictOutcome.Gap
+                && rule.RequiredEvidence is { Count: > 0 } evidence)
+            {
+                remediationText = "Document must state: " + string.Join("; ", evidence);
+            }
+            var built = BuildVerdict(
                 rule, ruleSet, outcome,
                 section: section,
                 input: inputJson,
@@ -510,7 +541,19 @@ public sealed class EvaluationService
                 remediationText: remediationText,
                 clauseSpan: clauseSpan,
                 bindings: bindingRecords);
+            return finding is null
+                ? built
+                : built with
+                {
+                    FindingKind = finding.FindingKind,
+                    AnchorKind = finding.AnchorKind,
+                    ClauseKind = finding.ClauseKind,
+                    UnanchoredReason = finding.UnanchoredReason,
+                    RewriteEligible = finding.RewriteEligible,
+                    ScopeBasis = scopeBasis,
+                };
         }
+
         catch (Exception ex)
         {
             _logger.LogError(ex, "Rule {RuleId} ({RuleVersion}) errored evaluating against {Path}",
@@ -676,39 +719,105 @@ public sealed class EvaluationService
     /// All lookups read the section's <c>text_char_start</c> projection
     /// field so spans line up with the canonical document offsets.
     /// </summary>
-    private static SourceSpan RefineAnchor(Rule rule, MatchedSection section)
-    {
-        var (narrow, _) = RefineSpans(rule, section);
-        return narrow;
-    }
+    private sealed record FindingInfo(
+        string FindingKind,
+        string AnchorKind,
+        string? ClauseKind,
+        string? UnanchoredReason,
+        bool RewriteEligible);
+
+    private sealed record FindingResolution(SourceSpan Evidence, SourceSpan? Clause, FindingInfo Info);
+
+    private const int MaxClauseChars = 800;
 
     /// <summary>
-    /// Compute the pair of spans the markup pipeline needs for issue #87:
-    ///   • <c>Narrow</c> — substring-precise evidence anchor (used for the
-    ///     reviewer comment marker, unchanged from pre-#87 behaviour).
-    ///   • <c>Clause</c> — paragraph-aligned widening of the same hit,
-    ///     used for tracked-change deletions / replacements so a clause
-    ///     that crosses paragraph boundaries is fully struck through.
-    /// Reads the section's <c>paragraphs[]</c> array (emitted by the
-    /// contract projector v1.5.0). Returns <c>Clause=null</c> when the
-    /// section has no paragraph metadata, so older cached projections
-    /// degrade gracefully to the pre-#87 single-paragraph behaviour.
+    /// Whether the rule is established as in scope for this section; null
+    /// when it is not (the caller then drops lambda failures). A rule is
+    /// scoped by an explicit predicate, a semantic gate, a lexical floor, or a
+    /// non-match-all selector. A match-all selector with predicate "true" is
+    /// NOT scope: it needs strong topic overlap (≥ half of the rule's topic
+    /// tokens and at least two shared tokens).
     /// </summary>
-    private static (SourceSpan Narrow, SourceSpan? Clause) RefineSpans(Rule rule, MatchedSection section)
+    private string? DetermineScopeBasis(Rule rule, MatchedSection section)
     {
-        if (section.Node is not JsonObject obj) return (section.Span, null);
-        var text = obj["text"]?.GetValue<string>() ?? string.Empty;
-        if (text.Length == 0) return (section.Span, null);
-        long bodyStart = section.Span.CharStart;
-        var bodyStartNode = obj["text_char_start"];
-        if (bodyStartNode is JsonValue bv)
+        // Authored scope terms are an additional AND gate on top of the
+        // predicate (which has already passed here): the section must contain
+        // at least one term (case-insensitive) or the rule is not in scope.
+        if (rule.Scope is { Terms: { Count: > 0 } terms })
         {
-            if (bv.TryGetValue<long>(out var lv)) bodyStart = lv;
-            else if (bv.TryGetValue<int>(out var iv)) bodyStart = iv;
+            var body = section.Node is JsonObject so
+                && so["text"] is JsonValue sv
+                && sv.TryGetValue<string>(out var st)
+                    ? st
+                    : string.Empty;
+            var matched = terms.Any(term =>
+                !string.IsNullOrWhiteSpace(term)
+                && body.Contains(term.Trim(), StringComparison.OrdinalIgnoreCase));
+            return matched ? ScopeBases.AuthoredScope : ScopeBases.AuthoredScopeNotMet;
         }
 
+        if (rule.GateThreshold > 0) return ScopeBases.SemanticGate;
+        if (rule.SemanticAnchors is { Count: > 0 }) return ScopeBases.SemanticAnchors;
+        if (!string.Equals(rule.Predicate, "true", StringComparison.Ordinal))
+            return ScopeBases.PredicateScoped;
+        if (_applicabilityFloor > 0.0) return ScopeBases.LexicalFloor;
+        if (!IsMatchAllSelector(rule.Selector)) return ScopeBases.SelectorScoped;
+
+        var topicTokens = ExtractTopicTokens(rule);
+        if (topicTokens.Count == 0) return null;
+        var sectionText = section.Node is JsonObject obj
+            && obj["text"] is JsonValue tv
+            && tv.TryGetValue<string>(out var t)
+                ? t
+                : string.Empty;
+        if (string.IsNullOrEmpty(sectionText)) return null;
+        var sectionTokens = TokenizeForFloor(sectionText);
+        var overlap = topicTokens.Count(sectionTokens.Contains);
+        var required = Math.Min(2, topicTokens.Count);
+        return overlap >= required && (double)overlap / topicTokens.Count >= 0.5
+            ? ScopeBases.TopicOverlap
+            : null;
+    }
+
+    private static bool IsMatchAllSelector(LambdaRag.Core.Selectors.Selector selector) =>
+        selector is LambdaRag.Core.Selectors.PathSelector p
+        && !p.Path.Contains("?(", StringComparison.Ordinal)
+        && (p.Path.EndsWith("[*]", StringComparison.Ordinal)
+            || p.Path.EndsWith("..*", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Classify a failed lambda and resolve its two spans independently:
+    ///   • evidence span — text-precise only for a contradiction (a
+    ///     prohibited literal found in the body) or an explicit
+    ///     <see cref="Rule.Anchor"/> hit. Otherwise it is the section span,
+    ///     flagged via <see cref="Verdict.AnchorKind"/> so it is never read as
+    ///     a quote.
+    ///   • clause span — paragraph/sentence containing a text-precise hit;
+    ///     null when unresolved (never the whole section).
+    /// A lambda that only fails because required literals are absent is a
+    /// missing requirement, not a contradiction.
+    /// </summary>
+    private static FindingResolution ResolveFinding(Rule rule, MatchedSection section)
+    {
+        string text = string.Empty;
+        long bodyStart = section.Span.CharStart;
+        var obj = section.Node as JsonObject;
+        if (obj is not null)
+        {
+            text = obj["text"] is JsonValue tv && tv.TryGetValue<string>(out var ts) ? ts : string.Empty;
+            if (obj["text_char_start"] is JsonValue bv)
+            {
+                if (bv.TryGetValue<long>(out var lv)) bodyStart = lv;
+                else if (bv.TryGetValue<int>(out var iv)) bodyStart = iv;
+            }
+        }
+
+        var literals = ExtractContainsLiterals(rule.Lambda).ToList();
+        var hasPositiveLiteral = literals.Any(l => !l.Negated);
+
         (int Index, int Length)? hit = null;
-        if (!string.IsNullOrEmpty(rule.Anchor))
+        var anchorKind = AnchorKinds.ContradictoryText;
+        if (text.Length > 0 && !string.IsNullOrEmpty(rule.Anchor))
         {
             try
             {
@@ -718,18 +827,23 @@ public sealed class EvaluationService
                     | System.Text.RegularExpressions.RegexOptions.Singleline,
                     TimeSpan.FromMilliseconds(200));
                 var m = rx.Match(text);
-                if (m.Success && m.Length > 0) hit = (m.Index, m.Length);
+                if (m.Success && m.Length > 0)
+                {
+                    hit = (m.Index, m.Length);
+                    anchorKind = AnchorKinds.RuleAnchor;
+                }
             }
             catch
             {
-                // Treat invalid anchor regex as "no anchor" — fall through.
+                // Invalid anchor regex is treated as "no anchor".
             }
         }
 
-        if (hit is null)
+        if (hit is null && text.Length > 0)
         {
-            foreach (var literal in ExtractContainsLiterals(rule.Lambda))
+            foreach (var (literal, negated) in literals)
             {
+                if (!negated) continue;
                 var idx = text.IndexOf(literal, StringComparison.OrdinalIgnoreCase);
                 if (idx >= 0)
                 {
@@ -739,7 +853,26 @@ public sealed class EvaluationService
             }
         }
 
-        if (hit is null) return (section.Span, WidenToParagraph(section.Span, obj, bodyStart, 0, text.Length));
+        if (hit is null)
+        {
+            // No contradictory text. Required literals that are absent make
+            // this a missing requirement; anything else stays an unresolved
+            // Fail. Both keep the section span and no clause span.
+            var missing = hasPositiveLiteral;
+            return new FindingResolution(
+                section.Span,
+                null,
+                new FindingInfo(
+                    missing ? FindingKinds.MissingRequirement : FindingKinds.Unclassified,
+                    missing ? AnchorKinds.SectionScope : AnchorKinds.Unresolved,
+                    ClauseKind: null,
+                    UnanchoredReason: text.Length == 0
+                        ? UnanchoredReasons.NoSectionText
+                        : missing
+                            ? UnanchoredReasons.MissingRequirementNoQuote
+                            : UnanchoredReasons.NoLiteralEvidence,
+                    RewriteEligible: false));
+        }
 
         var narrow = new SourceSpan(
             section.Span.DocumentId,
@@ -748,10 +881,52 @@ public sealed class EvaluationService
             PageNumber: section.Span.PageNumber,
             HeadingPath: section.Span.HeadingPath);
 
-        var clause = WidenToParagraph(
-            section.Span, obj, bodyStart,
-            hit.Value.Index, hit.Value.Index + hit.Value.Length);
-        return (narrow, clause);
+        var hitEnd = hit.Value.Index + hit.Value.Length;
+        var clause = obj is null
+            ? null
+            : WidenToParagraph(section.Span, obj, bodyStart, hit.Value.Index, hitEnd);
+        string? clauseKind = null;
+        string? reason = null;
+        if (clause is null)
+        {
+            reason = UnanchoredReasons.NoParagraphMetadata;
+        }
+        else
+        {
+            clauseKind = ClauseKinds.Paragraph;
+            if (clause.CharLength > MaxClauseChars)
+            {
+                clause = NarrowToSentence(section.Span, text, bodyStart, hit.Value.Index, hitEnd);
+                clauseKind = ClauseKinds.Sentence;
+            }
+        }
+
+        return new FindingResolution(
+            narrow,
+            clause,
+            new FindingInfo(
+                anchorKind == AnchorKinds.RuleAnchor ? FindingKinds.Unclassified : FindingKinds.Contradiction,
+                anchorKind,
+                clauseKind,
+                reason,
+                RewriteEligible: clause is not null));
+    }
+
+    private static SourceSpan NarrowToSentence(
+        SourceSpan baseSpan, string text, long bodyStart, int hitStart, int hitEnd)
+    {
+        static bool IsBoundary(char c) => c is '.' or '!' or '?' or ';' or '\n' or '\r';
+        var start = hitStart;
+        while (start > 0 && !IsBoundary(text[start - 1])) start--;
+        var end = hitEnd;
+        while (end < text.Length && !IsBoundary(text[end - 1])) end++;
+        while (start < hitStart && char.IsWhiteSpace(text[start])) start++;
+        return new SourceSpan(
+            baseSpan.DocumentId,
+            CharStart: (int)(bodyStart + start),
+            CharLength: end - start,
+            PageNumber: baseSpan.PageNumber,
+            HeadingPath: baseSpan.HeadingPath);
     }
 
     /// <summary>
@@ -799,19 +974,43 @@ public sealed class EvaluationService
             HeadingPath: baseSpan.HeadingPath);
     }
 
+    // Optional leading '!' + member chain ending in Contains("lit"). A leading
+    // negation marks the literal as prohibited (a hit is a contradiction).
     private static readonly System.Text.RegularExpressions.Regex ContainsLiteralRx = new(
-        "Contains\\(\\s*\"((?:[^\"\\\\]|\\\\.)*)\"\\s*\\)",
+        "(?<neg>!\\s*)?[A-Za-z_]\\w*(?:\\.\\w+(?:\\(\\s*\\))?)*\\.Contains\\(\\s*\"(?<lit>(?:[^\"\\\\]|\\\\.)*)\"\\s*\\)",
         System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private static IEnumerable<string> ExtractContainsLiterals(string lambda)
+    private static IEnumerable<(string Literal, bool Negated)> ExtractContainsLiterals(string lambda)
     {
         if (string.IsNullOrEmpty(lambda)) yield break;
         foreach (System.Text.RegularExpressions.Match m in ContainsLiteralRx.Matches(lambda))
         {
-            var raw = m.Groups[1].Value;
+            var raw = m.Groups["lit"].Value;
             if (raw.Length > 0)
-                yield return System.Text.RegularExpressions.Regex.Unescape(raw);
+                yield return (System.Text.RegularExpressions.Regex.Unescape(raw),
+                    m.Groups["neg"].Success || InsideNegatedGroup(lambda, m.Index));
         }
+    }
+
+    // True when the position sits inside an unclosed "!( ... )" group.
+    private static bool InsideNegatedGroup(string lambda, int index)
+    {
+        var depth = 0;
+        for (var i = index - 1; i >= 0; i--)
+        {
+            if (lambda[i] == ')') depth++;
+            else if (lambda[i] == '(')
+            {
+                if (depth == 0)
+                {
+                    var j = i - 1;
+                    while (j >= 0 && char.IsWhiteSpace(lambda[j])) j--;
+                    if (j >= 0 && lambda[j] == '!') return true;
+                }
+                else depth--;
+            }
+        }
+        return false;
     }
 
     private static JsonObject SnapshotInput(MatchedSection section) =>

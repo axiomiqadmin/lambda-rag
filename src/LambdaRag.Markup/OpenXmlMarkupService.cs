@@ -75,7 +75,7 @@ public sealed class OpenXmlMarkupService
     /// Apply annotations to <paramref name="sourcePath"/> and write the
     /// reviewed document to <paramref name="targetPath"/>.
     /// </summary>
-    public void Apply(string sourcePath, string targetPath, IEnumerable<Annotation> annotations)
+    public MarkupApplyResult Apply(string sourcePath, string targetPath, IEnumerable<Annotation> annotations)
     {
         if (!string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase))
             File.Copy(sourcePath, targetPath, overwrite: true);
@@ -98,8 +98,9 @@ public sealed class OpenXmlMarkupService
         // Build an index of paragraphs with running char offsets.
         var paragraphs = BuildParagraphIndex(body);
 
+        var results = new List<MarkupAnnotationResult>(ordered.Count);
         var stableCounter = 0;
-        foreach (var annotation in ordered)
+        foreach (var requested in ordered)
         {
             stableCounter++;
             // Stable comment id derived from annotation id, but OOXML wants
@@ -107,19 +108,191 @@ public sealed class OpenXmlMarkupService
             // a single Apply call the counter is deterministic because the
             // annotations are in stable order.
             var commentId = stableCounter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+            if (LocateParagraph(requested.Span.CharStart, paragraphs).Paragraph is null)
+            {
+                // Span does not fall within any paragraph's character range.
+                // Skip rather than misanchor to the last paragraph — that
+                // produced the "comment on the wrong paragraph" bug.
+                _logger.LogWarning(
+                    "Annotation {AnnotationId} span [{Start},{End}) does not match any paragraph; skipping",
+                    requested.Id, requested.Span.CharStart, requested.Span.CharEnd);
+                results.Add(Result(requested, requested.Kind, MarkupDisposition.Skipped,
+                    MarkupReasons.CommentTargetNotFound,
+                    $"span [{requested.Span.CharStart},{requested.Span.CharEnd}) matches no paragraph", null));
+                continue;
+            }
+
+            var a = requested;
+            string? withheldReason = null;
+            string? withheldDetail = null;
+            string? targetText = null;
+            if (requested.Kind != AnnotationKind.Comment)
+            {
+                var check = ValidateTrackedChange(requested, paragraphs);
+                if (check.Reason is not null)
+                {
+                    withheldReason = check.Reason;
+                    withheldDetail = check.Detail;
+                    a = requested with
+                    {
+                        Kind = AnnotationKind.Comment,
+                        Replacement = null,
+                        ClauseSpan = null,
+                        Reasons = requested.Reasons.Append(check.Reason).ToList(),
+                    };
+                    _logger.LogWarning(
+                        "Annotation {AnnotationId}: tracked change withheld ({Reason}); emitting comment only. {Detail}",
+                        requested.Id, check.Reason, check.Detail);
+                }
+                else
+                {
+                    targetText = check.TargetText;
+                }
+            }
+
             try
             {
-                ApplyOne(annotation, commentId, paragraphs, commentsPart.Comments);
+                ApplyOne(a, commentId, paragraphs, commentsPart.Comments);
+                results.Add(withheldReason is null
+                    ? Result(requested, a.Kind, MarkupDisposition.Applied, null, null, targetText)
+                    : Result(requested, a.Kind, MarkupDisposition.CommentOnly, withheldReason, withheldDetail, null));
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to apply annotation {AnnotationId} at span [{Start},{End})",
-                    annotation.Id, annotation.Span.CharStart, annotation.Span.CharEnd);
+                    requested.Id, requested.Span.CharStart, requested.Span.CharEnd);
+                results.Add(Result(requested, a.Kind, MarkupDisposition.Failed,
+                    MarkupReasons.ApplicationError, $"{ex.GetType().Name}: {ex.Message}", null));
             }
         }
 
         commentsPart.Comments.Save();
         main.Document.Save();
+        return new MarkupApplyResult(results);
+    }
+
+    private static MarkupAnnotationResult Result(
+        Annotation requested, AnnotationKind applied, MarkupDisposition disposition,
+        string? reason, string? detail, string? targetText)
+        => new(requested.Id, requested.Kind, applied, disposition, reason, detail,
+            requested.RuleIds, requested.Reasons)
+        { TargetText = targetText };
+
+    private sealed record TrackedChangeCheck(string? Reason, string? Detail, string? TargetText);
+
+    /// <summary>Largest original span (chars / paragraphs) a single tracked change may target.</summary>
+    internal const int MaxTargetChars = 4000;
+    internal const int MaxTargetParagraphs = 12;
+    private const int MaxReplacementLines = 40;
+
+    /// <summary>
+    /// Fail-closed validation of a requested tracked change against the
+    /// original span it would delete. Any problem downgrades the annotation
+    /// to a comment; nothing is emitted into w:ins / w:del.
+    /// </summary>
+    private static TrackedChangeCheck ValidateTrackedChange(
+        Annotation a, IReadOnlyList<ParagraphIndexEntry> paragraphs)
+    {
+        static TrackedChangeCheck Bad(string reason, string detail) => new(reason, detail, null);
+
+        var needsReplacement = a.Kind is AnnotationKind.Replace or AnnotationKind.Insert;
+        var replacement = a.Replacement;
+        if (needsReplacement)
+        {
+            if (string.IsNullOrWhiteSpace(replacement))
+                return Bad(MarkupReasons.ReplacementMissing, "replacement text is empty");
+            var trimmed = replacement.Trim();
+            if (string.Equals(trimmed, AnnotationFactory.NoRewriteMarker, StringComparison.OrdinalIgnoreCase))
+                return Bad(MarkupReasons.ReplacementDeclined, "editor declined (NO_REWRITE)");
+            if (trimmed.StartsWith("```", StringComparison.Ordinal)
+                || (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
+                || trimmed.StartsWith("Rewrite:", StringComparison.OrdinalIgnoreCase)
+                || replacement.Any(c => char.IsControl(c) && c is not '\n' and not '\r' and not '\t'))
+                return Bad(MarkupReasons.ReplacementInvalidFormat, "replacement is an envelope or contains control characters");
+            if (replacement.Split('\n').Length > MaxReplacementLines)
+                return Bad(MarkupReasons.ReplacementOverBroad, $"replacement exceeds {MaxReplacementLines} lines");
+        }
+
+        if (a.Kind == AnnotationKind.Insert)
+            return new TrackedChangeCheck(null, null, null);
+
+        // Delete / Replace: resolve the exact original span it would strike.
+        var target = a.ClauseSpan ?? a.Span;
+        if (a.ClauseSpan is { } clause
+            && (a.Span.CharStart < clause.CharStart || a.Span.CharStart > clause.CharEnd))
+            return Bad(MarkupReasons.TargetAmbiguous, "evidence span lies outside the clause span");
+
+        var startIdx = IndexContaining(target.CharStart, paragraphs);
+        if (startIdx < 0)
+            return Bad(MarkupReasons.TargetMissing, $"target [{target.CharStart},{target.CharEnd}) matches no paragraph");
+
+        var endChar = target.CharStart + Math.Max(target.CharLength, 0);
+        var last = paragraphs[^1];
+        if (endChar > last.Offset + last.Length)
+            return Bad(MarkupReasons.TargetMissing, "target extends past the end of the document");
+
+        var endIdx = startIdx;
+        for (var i = startIdx; i < paragraphs.Count; i++)
+        {
+            var p = paragraphs[i];
+            if (endChar > p.Offset && endChar <= p.Offset + p.Length) { endIdx = i; break; }
+            if (endChar <= p.Offset) { endIdx = Math.Max(startIdx, i - 1); break; }
+            endIdx = i;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        for (var i = startIdx; i <= endIdx; i++)
+        {
+            var p = paragraphs[i];
+            var from = i == startIdx ? target.CharStart - p.Offset : 0;
+            var to = i == endIdx ? Math.Min(endChar - p.Offset, p.Length) : p.Length;
+            if (to > from)
+            {
+                if (sb.Length > 0) sb.Append('\n');
+                sb.Append(p.Text, from, to - from);
+            }
+        }
+        var original = sb.ToString();
+        if (string.IsNullOrWhiteSpace(original))
+            return Bad(MarkupReasons.TargetEmpty, "target span resolves to no text");
+
+        var covered = endIdx - startIdx + 1;
+        if (original.Length > MaxTargetChars || covered > MaxTargetParagraphs)
+            return Bad(MarkupReasons.TargetOverBroad,
+                $"target covers {original.Length} chars / {covered} paragraphs (max {MaxTargetChars} / {MaxTargetParagraphs})");
+
+        for (var i = startIdx; i <= endIdx; i++)
+        {
+            if (paragraphs[i].IsTableCell && (covered > 1 || paragraphs[i].CellParagraphCount > 1))
+                return Bad(MarkupReasons.StructurallyUnsafe, "target spans or sits in a multi-paragraph table cell");
+        }
+
+        if (needsReplacement)
+        {
+            var normalizedOriginal = NormalizeInlineParagraph(original);
+            var normalizedReplacement = NormalizeInlineParagraph(replacement!);
+            if (string.Equals(normalizedOriginal, normalizedReplacement, StringComparison.Ordinal))
+                return Bad(MarkupReasons.ReplacementIdentical, "replacement equals the original text");
+            if (normalizedReplacement.Length > normalizedOriginal.Length * 4 + 400)
+                return Bad(MarkupReasons.ReplacementOverBroad,
+                    $"replacement ({normalizedReplacement.Length} chars) far exceeds target ({normalizedOriginal.Length} chars)");
+            if (normalizedOriginal.Length >= 200 && normalizedReplacement.Length < normalizedOriginal.Length / 10)
+                return Bad(MarkupReasons.ReplacementOverBroad,
+                    $"replacement ({normalizedReplacement.Length} chars) discards most of the target ({normalizedOriginal.Length} chars)");
+        }
+
+        return new TrackedChangeCheck(null, null, original);
+    }
+
+    private static int IndexContaining(int charStart, IReadOnlyList<ParagraphIndexEntry> paragraphs)
+    {
+        for (var i = 0; i < paragraphs.Count; i++)
+        {
+            var p = paragraphs[i];
+            if (charStart >= p.Offset && charStart <= p.Offset + p.Length) return i;
+        }
+        return -1;
     }
 
     private static List<ParagraphIndexEntry> BuildParagraphIndex(Body body)
@@ -147,7 +320,7 @@ public sealed class OpenXmlMarkupService
             {
                 var normalized = NormalizeInlineParagraph(para.InnerText);
                 if (normalized.Length == 0) continue;
-                list.Add(new ParagraphIndexEntry(para, offset, normalized.Length));
+                list.Add(new ParagraphIndexEntry(para, offset, normalized.Length, normalized));
                 offset += normalized.Length + 1;
             }
             else if (element is Table table)
@@ -166,7 +339,9 @@ public sealed class OpenXmlMarkupService
                         // within the cell.
                         var anchor = cell.Elements<Paragraph>().FirstOrDefault();
                         if (anchor is null) continue;
-                        list.Add(new ParagraphIndexEntry(anchor, offset, cellNormalized.Length));
+                        list.Add(new ParagraphIndexEntry(
+                            anchor, offset, cellNormalized.Length, cellNormalized,
+                            IsTableCell: true, CellParagraphCount: cell.Elements<Paragraph>().Count()));
                         offset += cellNormalized.Length + 1;
                     }
                 }
@@ -1090,5 +1265,6 @@ public sealed class OpenXmlMarkupService
         return (null, 0, 0);
     }
 
-    private sealed record ParagraphIndexEntry(Paragraph Paragraph, int Offset, int Length);
+    private sealed record ParagraphIndexEntry(
+        Paragraph Paragraph, int Offset, int Length, string Text, bool IsTableCell = false, int CellParagraphCount = 1);
 }

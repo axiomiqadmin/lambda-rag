@@ -112,8 +112,9 @@ public class ApplicabilityFloorTests
         report.RulesFailed.Should().BeNull();
         report.RuleScore.Should().BeNull();
         report.RuleSummaries.Should().BeNull();
-        // Verdict count unchanged from pre-Pillar-10 semantics.
-        report.Verdicts.Count.Should().Be(3);
+        // Unrelated sections s2/s3 are out of scope and emit no verdict.
+        report.Verdicts.Count.Should().Be(1);
+        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.Pass);
     }
 
     // ── Applicability floor: silent-topic rule ──────────────────────────
@@ -192,21 +193,21 @@ public class ApplicabilityFloorTests
             lambda: "input1.text.Contains(\"docs/adr/\")");
         var doc = Doc(
             ("s1", "ADRs live under docs/adr/ per policy."),
-            ("s2", "ADR templates are in the wiki, not the repo."),
+            ("s2", "ADR templates for docs live in the wiki, not the repo."),
             ("s3", "See the ADR retention section for archival."));
 
         var report = await Build(applicabilityFloor: 0.0, emitRuleLevelStats: true)
             .EvaluateAsync(Set(rule), doc);
 
-        // Per-verdict: 1 Pass + 2 Fails. Rule-level: 1 Pass, 0 Fails.
+        // s2 is in scope but omits the path (Gap); s3 is unrelated (no verdict).
         report.Passed.Should().Be(1);
-        report.Failed.Should().Be(2);
+        report.Failed.Should().Be(0);
+        report.Gaps.Should().Be(1);
         report.TotalUniqueRules.Should().Be(1);
         report.RulesPassed.Should().Be(1);
         report.RulesFailed.Should().Be(0);
         report.RuleScore.Should().Be(1.0);
-        // Legacy score = 1/(1+2) ≈ 0.333, rule score = 1/1 = 1.0.
-        report.Score.Should().BeApproximately(1.0 / 3.0, 1e-9);
+        report.Score.Should().BeApproximately(0.5, 1e-9);
     }
 
     [Fact]
@@ -224,7 +225,7 @@ public class ApplicabilityFloorTests
         var a = report.RuleSummaries!.Single(s => s.RuleId == "A-01");
         a.AggregateOutcome.Should().Be(VerdictOutcome.Pass);
         a.PassCount.Should().Be(1);
-        a.FailCount.Should().Be(2);
-        a.SectionsEvaluated.Should().Be(3);
+        a.FailCount.Should().Be(0);
+        a.SectionsEvaluated.Should().Be(1);
     }
 }

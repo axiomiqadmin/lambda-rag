@@ -12,7 +12,7 @@
   "score": 0,
   "totalRules": 7,
   "passed": 0,
-  "failed": 5,
+  "failed": 1,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
@@ -122,13 +122,18 @@
         "charLength": 82,
         "headingPath": "/Privacy Notice — DataFlow Analytics/Information we collect",
         "charEnd": 902
-      }
+      },
+      "findingKind": "contradiction",
+      "anchorKind": "contradictory_text",
+      "clauseKind": "paragraph",
+      "rewriteEligible": true,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:3899de1289d3dd4257a9283c2ccaa7b1d1a30c4532a1557cae97bf01bfb7622a",
+      "id": "lr1:e3cb974690822217d4f5303a981bf6fed2279b488c99f27f552502af23f3feaa",
       "ruleId": "GDPR-G-3-LawfulBasis",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"lawful basis\") || input1.text.Contains(\"Lawful basis\")) && (input1.text.Contains(\"Art. 6\") || input1.text.Contains(\"Article 6\")) && (input1.text.Contains(\"consent\") || input1.text.Contains(\"contract\") || input1.text.Contains(\"legitimate interests\") || input1.text.Contains(\"legal obligation\"))",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -224,19 +229,17 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Add a column or paragraph in Information we collect naming the specific Art. 6 lawful basis (e.g., Art. 6(1)(a) consent, Art. 6(1)(b) contract, Art. 6(1)(c) legal obligation, Art. 6(1)(f) legitimate interests) for each processing purpose.",
       "predicateText": "input1.category == \"lawful_basis\" || input1.category == \"purpose_and_minimisation\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 524,
-        "charLength": 378,
-        "headingPath": "/Privacy Notice — DataFlow Analytics/Information we collect",
-        "charEnd": 902
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:7002ebbdc42a7ad48c04dd59f026b78a34c9e1eb8628f915e5584bc2fc80bb1d",
+      "id": "lr1:2fe6e014d19a793f1f4e3b445d47c0ffd17001bc5a265007b161e6f4ca4c3300",
       "ruleId": "GDPR-G-3-LawfulBasis",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"lawful basis\") || input1.text.Contains(\"Lawful basis\")) && (input1.text.Contains(\"Art. 6\") || input1.text.Contains(\"Article 6\")) && (input1.text.Contains(\"consent\") || input1.text.Contains(\"contract\") || input1.text.Contains(\"legitimate interests\") || input1.text.Contains(\"legal obligation\"))",
       "evaluatedInput": {
         "id": "s_00000007",
@@ -291,10 +294,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 1596,
-        "charLength": 7,
+        "charStart": 1557,
+        "charLength": 10,
         "headingPath": "/Privacy Notice — DataFlow Analytics/Consent",
-        "charEnd": 1603
+        "charEnd": 1567
       },
       "errorMessage": "Rule 'GDPR-G-3-LawfulBasis' failed: The controller must identify and disclose the specific Art. 6 lawful basis for each processing activity. A privacy notice that lists collected data without naming any Art. 6 basis is a gap.",
       "evidenceQuotes": [
@@ -304,19 +307,17 @@
       "matchedSectionId": "s_00000007",
       "remediationText": "Add a column or paragraph in Consent naming the specific Art. 6 lawful basis (e.g., Art. 6(1)(a) consent, Art. 6(1)(b) contract, Art. 6(1)(c) legal obligation, Art. 6(1)(f) legitimate interests) for each processing purpose.",
       "predicateText": "input1.category == \"lawful_basis\" || input1.category == \"purpose_and_minimisation\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 1568,
-        "charLength": 109,
-        "headingPath": "/Privacy Notice — DataFlow Analytics/Consent",
-        "charEnd": 1677
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:403f28a13b6aa78cfd94da2c59ce1a73be5b220e2c58c6ac0fb1abf0699580af",
+      "id": "lr1:769a76741e2168f0e95418ef3c545e5d2db8623d9cdb28730f8a3f998cef8b23",
       "ruleId": "GDPR-G-4-Transparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"controller\") && (input1.text.Contains(\"DPO\") || input1.text.Contains(\"Data Protection Officer\") || input1.text.Contains(\"recipients\") || input1.text.Contains(\"retain\") || input1.text.Contains(\"retention\"))",
       "evaluatedInput": {
         "id": "s_00000000",
@@ -382,19 +383,17 @@
       "matchedSectionId": "s_00000000",
       "remediationText": "Update Privacy Notice — DataFlow Analytics so it explicitly names the controller identity & contact, the recipients (or a sub-processor list URL), and the retention period for each data category, per Arts. 13–14.",
       "predicateText": "input1.category == \"transparency\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 39,
-        "charLength": 227,
-        "headingPath": "/Privacy Notice — DataFlow Analytics",
-        "charEnd": 266
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:46b9ebc6a0d7333517e07fe84ba3217e6fcc11a6f4cd27349f34a8fc696ff3c2",
+      "id": "lr1:5f8ea46297fa665c549f21641dab21a5ef376a1abf2fbbe45afb681040c63741",
       "ruleId": "GDPR-G-5-DataSubjectRights",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"access\") && (input1.text.Contains(\"rectif\") || input1.text.Contains(\"correct\")) && (input1.text.Contains(\"eras\") || input1.text.Contains(\"delete\")) && (input1.text.Contains(\"lodge a complaint\") || input1.text.Contains(\"supervisory authority\"))",
       "evaluatedInput": {
         "id": "s_00000005",
@@ -447,10 +446,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 1302,
-        "charLength": 6,
+        "charStart": 1265,
+        "charLength": 15,
         "headingPath": "/Privacy Notice — DataFlow Analytics/Your choices",
-        "charEnd": 1308
+        "charEnd": 1280
       },
       "errorMessage": "Rule 'GDPR-G-5-DataSubjectRights' failed: The notice must enumerate data-subject rights (access, rectification, erasure, restriction, portability, objection) AND the right to lodge a complaint with a supervisory authority. Only mentioning \"access\" is a gap.",
       "evidenceQuotes": [
@@ -460,13 +459,11 @@
       "matchedSectionId": "s_00000005",
       "remediationText": "Expand Your choices to enumerate every data-subject right (access, rectification, erasure, restriction, portability, objection, withdrawal of consent) AND the right to lodge a complaint with a supervisory authority, with contact details.",
       "predicateText": "input1.category == \"data_subject_rights\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 1281,
-        "charLength": 155,
-        "headingPath": "/Privacy Notice — DataFlow Analytics/Your choices",
-        "charEnd": 1436
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:276d8f772d6062eeb37f54d2cdfe1135a336c82ea900632c6532456bfb3e7133",
@@ -514,5 +511,5 @@
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 2
+  "gaps": 6
 }

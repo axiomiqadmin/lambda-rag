@@ -25,9 +25,9 @@ namespace LambdaRag.Authoring.Editing;
 /// new clause text that would make the document comply. No commentary,
 /// no markdown, no JSON.
 /// </summary>
-public sealed class ComplianceEditor : IClauseRewriter
+public sealed class ComplianceEditor : IClauseRewriter, IReasonedClauseRewriter
 {
-    public const string CacheSchemaVersion = "v1";
+    public const string CacheSchemaVersion = "v2";
 
     public const string AgentName = "ComplianceEditor";
 
@@ -46,21 +46,40 @@ public sealed class ComplianceEditor : IClauseRewriter
           source document.
 
         Output ONLY the rewritten clause text. No preamble, no markdown,
-        no quotes, no JSON, no "Here is...". Preserve the original tone
-        and structure of the clause; change only what is needed to make
-        the clause comply.
+        no quotes, no JSON, no "Here is...".
+
+        MINIMAL EDITS (critical): change only the words needed to address
+        the cited rule. Keep every unaffected word, sentence, defined
+        term (capitalized terms), number, name and fact exactly as in the
+        CLAUSE. Do not invent obligations, implementation details, parties,
+        amounts, dates or facts that are not in the CLAUSE, RULE or
+        REMEDIATION.
 
         STRUCTURE PRESERVATION (critical): if the CLAUSE contains '\n',
         your output MUST use '\n' to preserve the same paragraph / list
-        structure. Keep the same number of lines unless the rule
-        genuinely requires merging or expanding items. Do not collapse a
-        bulleted list into a single paragraph and do not output markdown
-        bullet markers — emit raw line text separated by '\n'.
+        structure with exactly the same number of lines. Do not collapse a
+        bulleted list into a single paragraph, do not add or remove lines,
+        and do not output markdown bullet markers — emit raw line text
+        separated by '\n'.
+
+        DECLINING: if the CLAUSE does not itself contain the problem, the
+        rule cannot be satisfied by editing this CLAUSE alone (for example
+        the requirement is missing and would need new content), the
+        target is ambiguous, or you are not confident a safe, necessary
+        edit exists, output exactly NO_REWRITE and nothing else. Declining
+        is always acceptable; a wrong rewrite is not.
 
         Keep total length proportional to the original; do not exceed
-        1000 characters. Always produce a rewrite — even if the change
-        is minimal, adjust the clause wording to align with the rule.
+        1000 characters.
         """;
+
+    // Bumped whenever SystemPrompt or the validation contract changes so cached
+    // decisions made under an older contract are never replayed.
+    public const string PromptContractVersion = "v2-minimal-norewrite";
+
+    public static string PromptFingerprint { get; } = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(PromptContractVersion + "\u001f" + SystemPrompt)))
+        .ToLowerInvariant();
 
     private readonly AIAgent _agent;
     private readonly ComplianceEditorOptions _options;
@@ -77,9 +96,17 @@ public sealed class ComplianceEditor : IClauseRewriter
         string clauseText,
         Rule? rule,
         CancellationToken cancellationToken = default)
+        => (await RewriteWithReasonAsync(verdict, clauseText, rule, cancellationToken).ConfigureAwait(false)).Text;
+
+    public async Task<RewriteOutcome> RewriteWithReasonAsync(
+        Verdict verdict,
+        string clauseText,
+        Rule? rule,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(verdict);
-        if (string.IsNullOrWhiteSpace(clauseText)) return null;
+        if (string.IsNullOrWhiteSpace(clauseText))
+            return RewriteOutcome.Rejected(RewriteSkipReason.NoClauseText);
 
         var key = ComputeCacheKey(rule, verdict, clauseText);
         var cachePath = Path.Combine(_options.CacheDir, key + ".json");
@@ -87,17 +114,23 @@ public sealed class ComplianceEditor : IClauseRewriter
         if (File.Exists(cachePath))
         {
             var cached = TryReadCache(cachePath);
-            if (cached is not null) return cached.Length == 0 ? null : cached;
+            if (cached is not null)
+            {
+                // Re-validate on replay so a cache entry can never bypass the contract.
+                return cached.Reason == RewriteSkipReason.None
+                    ? Validate(clauseText, cached.Rewrite, _options.MaxRewriteLength, rawAlreadyNormalized: true)
+                    : RewriteOutcome.Rejected(cached.Reason);
+            }
         }
 
         var userMessage = BuildUserMessage(rule, verdict, clauseText);
-        string? rewrite;
+        string? raw;
         try
         {
             var response = await _agent
                 .RunAsync(userMessage, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            rewrite = response?.Text;
+            raw = response?.Text;
         }
         catch (OperationCanceledException)
         {
@@ -105,23 +138,99 @@ public sealed class ComplianceEditor : IClauseRewriter
         }
         catch (Exception)
         {
-            return null;
+            return RewriteOutcome.Rejected(RewriteSkipReason.ModelError);
         }
 
-        rewrite = Normalize(rewrite, _options.MaxRewriteLength);
+        var outcome = Validate(clauseText, raw, _options.MaxRewriteLength);
         File.WriteAllText(cachePath, JsonSerializer.Serialize(new CacheEntry(
             RuleId: rule?.Id,
             VerdictId: verdict.Id,
-            Rewrite: rewrite ?? string.Empty,
-            CreatedAt: DateTimeOffset.UtcNow)));
+            Rewrite: outcome.Text ?? string.Empty,
+            CreatedAt: DateTimeOffset.UtcNow)
+        {
+            Reason = outcome.Reason,
+            PromptFingerprint = PromptFingerprint,
+        }));
 
-        return string.IsNullOrEmpty(rewrite) ? null : rewrite;
+        return outcome;
+    }
+
+    /// <summary>
+    /// Validates a raw model response against the targeted original span.
+    /// Anything declined, empty, unchanged, over-broad or structurally
+    /// different from the original is rejected with an explicit reason so the
+    /// caller keeps the finding as a comment only.
+    /// </summary>
+    public static RewriteOutcome Validate(
+        string originalClause, string? raw, int maxLength, bool rawAlreadyNormalized = false)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return RewriteOutcome.Rejected(RewriteSkipReason.EmptyResponse);
+        var trimmed = raw.Trim().Trim('"', '\u201C', '\u201D').Trim();
+        if (trimmed.StartsWith("NO_REWRITE", StringComparison.OrdinalIgnoreCase))
+            return RewriteOutcome.Rejected(RewriteSkipReason.Declined);
+
+        var normalized = rawAlreadyNormalized
+            ? raw
+            : Normalize(raw, int.MaxValue);
+        if (string.IsNullOrEmpty(normalized)) return RewriteOutcome.Rejected(RewriteSkipReason.EmptyResponse);
+
+        var original = Normalize(originalClause, int.MaxValue) ?? string.Empty;
+        if (string.Equals(original, normalized, StringComparison.Ordinal))
+            return RewriteOutcome.Rejected(RewriteSkipReason.Unchanged);
+
+        if (normalized.Length > maxLength
+            || normalized.Length > original.Length * 2 + 80)
+            return RewriteOutcome.Rejected(RewriteSkipReason.OverBroad);
+
+        var origLines = original.Split('\n');
+        var newLines = normalized.Split('\n');
+        if (origLines.Length != newLines.Length || newLines.Any(l => l.Length == 0))
+            return RewriteOutcome.Rejected(RewriteSkipReason.StructureChanged);
+        for (var i = 0; i < newLines.Length; i++)
+        {
+            if (StartsWithListMarker(newLines[i]) && !StartsWithListMarker(origLines[i]))
+                return RewriteOutcome.Rejected(RewriteSkipReason.StructureChanged);
+        }
+
+        // Preservation: most original words must survive for the edit to count as minimal.
+        var origWords = Words(original);
+        if (origWords.Count >= 6)
+        {
+            var newWords = Words(normalized);
+            var kept = origWords.Count(w => newWords.Contains(w));
+            if (kept * 2 < origWords.Count)
+                return RewriteOutcome.Rejected(RewriteSkipReason.OverBroad);
+        }
+
+        return RewriteOutcome.Accepted(normalized);
+    }
+
+    private static bool StartsWithListMarker(string line)
+    {
+        var l = line.TrimStart();
+        return l.StartsWith("- ", StringComparison.Ordinal)
+            || l.StartsWith("* ", StringComparison.Ordinal)
+            || l.StartsWith("\u2022", StringComparison.Ordinal)
+            || l.StartsWith('#')
+            || l.StartsWith("```", StringComparison.Ordinal);
+    }
+
+    private static HashSet<string> Words(string s)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var w in s.Split([' ', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var t = w.Trim('.', ',', ';', ':', '(', ')', '"', '\'');
+            if (t.Length > 0) set.Add(t);
+        }
+        return set;
     }
 
     public static string ComputeCacheKey(Rule? rule, Verdict verdict, string clauseText)
     {
         var canonical = string.Join('\u001f',
             CacheSchemaVersion,
+            PromptFingerprint,
             rule?.Id ?? string.Empty,
             rule?.Version ?? string.Empty,
             verdict.RuleId,
@@ -185,12 +294,15 @@ public sealed class ComplianceEditor : IClauseRewriter
         return sb.ToString();
     }
 
-    private static string? TryReadCache(string path)
+    private static CacheEntry? TryReadCache(string path)
     {
         try
         {
             var entry = JsonSerializer.Deserialize<CacheEntry>(File.ReadAllText(path));
-            return entry?.Rewrite;
+            return entry is not null
+                && string.Equals(entry.PromptFingerprint, PromptFingerprint, StringComparison.Ordinal)
+                ? entry
+                : null;
         }
         catch
         {
@@ -202,5 +314,43 @@ public sealed class ComplianceEditor : IClauseRewriter
         string? RuleId,
         string VerdictId,
         string Rewrite,
-        DateTimeOffset CreatedAt);
+        DateTimeOffset CreatedAt)
+    {
+        public RewriteSkipReason Reason { get; init; }
+        public string? PromptFingerprint { get; init; }
+    }
+}
+
+/// <summary>Why a rewrite was not emitted. <see cref="None"/> means accepted.</summary>
+public enum RewriteSkipReason
+{
+    None = 0,
+    Declined,
+    EmptyResponse,
+    Unchanged,
+    OverBroad,
+    StructureChanged,
+    ModelError,
+    NoClauseText,
+    AmbiguousTarget,
+    SharedIncompatibleSpan,
+    UnrelatedContentAtRisk,
+    NotRewritable,
+}
+
+public sealed record RewriteOutcome(string? Text, RewriteSkipReason Reason)
+{
+    public bool IsAccepted => Reason == RewriteSkipReason.None && !string.IsNullOrEmpty(Text);
+    public static RewriteOutcome Accepted(string text) => new(text, RewriteSkipReason.None);
+    public static RewriteOutcome Rejected(RewriteSkipReason reason) => new(null, reason);
+}
+
+/// <summary>Rewriter that reports an explicit reason when it withholds a rewrite.</summary>
+public interface IReasonedClauseRewriter
+{
+    Task<RewriteOutcome> RewriteWithReasonAsync(
+        Verdict verdict,
+        string clauseText,
+        Rule? rule,
+        CancellationToken cancellationToken = default);
 }

@@ -12,7 +12,7 @@
   "score": 0,
   "totalRules": 7,
   "passed": 0,
-  "failed": 4,
+  "failed": 1,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
@@ -39,10 +39,10 @@
       "predicateText": "input1.category == \"privacy_officer\""
     },
     {
-      "id": "lr1:7b59b9a03a006f2330653b47786f5ba06ddacdfef8f1abba614c17d192ab8a89",
+      "id": "lr1:b94b0899c05b6ebd46100bc95f2df4273c5289ab19793510ff9f044da14a4a11",
       "ruleId": "QLA25-L-2-CollectionTransparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"rectif\") || input1.text.Contains(\"access and rectification\")) && (input1.text.Contains(\"withdraw consent\") || input1.text.Contains(\"right to withdraw\"))",
       "evaluatedInput": {
         "id": "s_00000002",
@@ -136,19 +136,17 @@
       "matchedSectionId": "s_00000002",
       "remediationText": "Expand Information we collect to inform individuals at collection of: (a) purposes, (b) the rights of access and rectification, and (c) the route to withdraw consent, per s. 8.",
       "predicateText": "input1.category == \"collection_transparency\" || input1.category == \"rights_and_complaints\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 524,
-        "charLength": 378,
-        "headingPath": "/Privacy Notice — DataFlow Analytics/Information we collect",
-        "charEnd": 902
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:36affaf153607b4e8b3d63f55b66681e174b9fa344a5d1d3727d55a15a195a8e",
+      "id": "lr1:ca4df054157960568e29fea02c47934cc2f2920aa76aa78ccda113f93b6ff027",
       "ruleId": "QLA25-L-2-CollectionTransparency",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"rectif\") || input1.text.Contains(\"access and rectification\")) && (input1.text.Contains(\"withdraw consent\") || input1.text.Contains(\"right to withdraw\"))",
       "evaluatedInput": {
         "id": "s_00000005",
@@ -214,13 +212,11 @@
       "matchedSectionId": "s_00000005",
       "remediationText": "Expand Your choices to inform individuals at collection of: (a) purposes, (b) the rights of access and rectification, and (c) the route to withdraw consent, per s. 8.",
       "predicateText": "input1.category == \"collection_transparency\" || input1.category == \"rights_and_complaints\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 1281,
-        "charLength": 155,
-        "headingPath": "/Privacy Notice — DataFlow Analytics/Your choices",
-        "charEnd": 1436
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:d3f4d0bb3ea6a6a510ae156c4eac2575778d6ee93a77e9e11618c0f12707a10f",
@@ -245,10 +241,10 @@
       "predicateText": "input1.category == \"privacy_by_default\""
     },
     {
-      "id": "lr1:bb5bf3565887704fae7302875aeb9869ac260cd37f80d13e1ccdff457b5f3049",
+      "id": "lr1:0e48891ecdea7bb19b45386d10643875fe2f34b808d58301db27ddfbeda724b8",
       "ruleId": "QLA25-L-4-PrivacyImpactAssessment",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"Privacy Impact Assessment\") || input1.text.Contains(\"PIA\")) && (input1.text.Contains(\"outside Québec\") || input1.text.Contains(\"outside Quebec\") || input1.text.Contains(\"outside the province\") || input1.text.Contains(\"outside the EEA\") || input1.text.Contains(\"system project\") || input1.text.Contains(\"before communicating\") || input1.text.Contains(\"beforehand\") || input1.text.Contains(\"cross-border\"))",
       "evaluatedInput": {
         "id": "s_00000007",
@@ -314,13 +310,11 @@
       "matchedSectionId": "s_00000007",
       "remediationText": "Describe a PIA process in Consent tied to (a) new or overhauled information systems and (b) communications of PI outside Québec, per s. 3.3 and s. 17.",
       "predicateText": "input1.category == \"privacy_impact_assessment\" || input1.category == \"consent_cross_border\"",
-      "clauseSpan": {
-        "documentId": "lr1:571cd3933e9851b2e9df56f1de6e8390d54791580efcf31d28c0fea112095557",
-        "charStart": 1568,
-        "charLength": 109,
-        "headingPath": "/Privacy Notice — DataFlow Analytics/Consent",
-        "charEnd": 1677
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
       "id": "lr1:050ee965cedc7d96ef040eda6f35144ab4df1db9d0cf5489a65f561963d9b07c",
@@ -420,9 +414,14 @@
         "charLength": 109,
         "headingPath": "/Privacy Notice — DataFlow Analytics/Consent",
         "charEnd": 1677
-      }
+      },
+      "findingKind": "contradiction",
+      "anchorKind": "contradictory_text",
+      "clauseKind": "paragraph",
+      "rewriteEligible": true,
+      "scopeBasis": "predicate_scoped"
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 3
+  "gaps": 6
 }

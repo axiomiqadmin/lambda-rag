@@ -5,6 +5,26 @@ All notable changes to lambda-rag are documented here. The format follows
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once
 it reaches `1.0.0`.
 
+## [Unreleased]
+
+### Changed
+
+- Review findings now distinguish explicit contradictions from missing
+  requirements. Runtime applicability respects authored scope and
+  match-all rules require defensible scope evidence; unresolved findings
+  are not widened to whole-section edit spans.
+- Rule authoring now records obligation strength, scope, required evidence,
+  and a severity basis. Generated rules with unsupported severity use the
+  non-MAJOR review-needed default; legacy high-severity rules without an
+  impact basis render at that default until reviewed. Scope examples are
+  checked before publication.
+- DOCX markup groups same-obligation findings at the same location,
+  anchors in-scope gaps as comment-only scoped findings, and withholds
+  ambiguous or unsafe tracked changes with an auditable reason. Markup
+  skips and failures are surfaced in the CLI result.
+- Updated corpus verdict goldens and the reviewed-DOCX golden for the
+  intentional finding and comment changes.
+
 ## [1.2.0] — 2026-07-02
 
 Domain-scoped review + Flexibility pillar refinement. This release

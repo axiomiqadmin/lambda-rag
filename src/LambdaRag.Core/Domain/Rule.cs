@@ -7,6 +7,39 @@ namespace LambdaRag.Core.Domain;
 public enum RuleSeverity { Suggestion, Deviation, Violation, Critical }
 
 /// <summary>
+/// Resolves an effective review severity without rewriting legacy rulesets.
+/// High configured severities lacking a substantive impact basis are shown
+/// with the non-MAJOR review-needed default until a reviewer supplies one.
+/// </summary>
+public static class RuleSeverityPolicy
+{
+    public const int MinimumImpactBasisLength = 20;
+    public const RuleSeverity ReviewNeededDefault = RuleSeverity.Deviation;
+    public const string ReviewNeededBasis = "review-needed: missing or insufficient impact basis";
+
+    public static bool NeedsReview(Rule rule)
+        => rule.Severity is RuleSeverity.Violation or RuleSeverity.Critical
+           && GetImpactBasis(rule).Length < MinimumImpactBasisLength;
+
+    public static RuleSeverity EffectiveSeverity(Rule rule)
+        => NeedsReview(rule) ? ReviewNeededDefault : rule.Severity;
+
+    public static string? ReviewReason(Rule rule)
+        => NeedsReview(rule)
+            ? $"severity:review-needed-default:rule={rule.Id};basis=missing-or-insufficient-impact-basis"
+            : null;
+
+    private static string GetImpactBasis(Rule rule)
+    {
+        var basis = rule.SeverityBasis;
+        if (string.IsNullOrWhiteSpace(basis)
+            && rule.Metadata.TryGetValue("severityBasis", out var metadataBasis))
+            basis = metadataBasis;
+        return basis?.Trim() ?? string.Empty;
+    }
+}
+
+/// <summary>
 /// Whether a rule MUST apply to every document in the domain.
 ///
 /// • <see cref="Mandatory"/>: every document is expected to address this
@@ -29,6 +62,16 @@ public enum RuleSeverity { Suggestion, Deviation, Violation, Critical }
 /// Conditional. Default is Mandatory.
 /// </summary>
 public enum RuleApplicability { Mandatory, Conditional, Optional }
+
+/// <summary>Strength of the source obligation; not a severity.</summary>
+public enum RuleObligation { Must, Should, May }
+
+/// <summary>
+/// Conditions under which a rule is in scope for a section. A section is in
+/// scope when its text contains any of <see cref="Terms"/>
+/// (case-insensitive). <see cref="Description"/> is human-readable audit text.
+/// </summary>
+public sealed record RuleScope(IReadOnlyList<string> Terms, string? Description = null);
 
 /// <summary>
 /// A rule extracted from a source policy. The combination of
@@ -202,8 +245,36 @@ public sealed record Rule(
     /// </summary>
     public IReadOnlyList<string>? RequiredFactsAny { get; init; }
 
+    /// <summary>
+    /// Obligation strength of the source clause (<see cref="RuleObligation"/>).
+    /// Independent of <see cref="Severity"/>: MUST/SHALL does not by itself
+    /// imply a high-impact finding. Null on rules authored before the
+    /// review-annotation-quality contract; folded into the fingerprint only
+    /// when set.
+    /// </summary>
+    public RuleObligation? Obligation { get; init; }
+
+    /// <summary>
+    /// Scope / applicability conditions that establish the rule is in scope
+    /// for a section. Authoring compiles these into <see cref="Predicate"/>
+    /// so the deterministic gate enforces them. Null = legacy rule.
+    /// </summary>
+    public RuleScope? Scope { get; init; }
+
+    /// <summary>
+    /// What a document must state for the rule to be satisfied (audit
+    /// metadata distinct from scope). Null/empty = not authored.
+    /// </summary>
+    public IReadOnlyList<string>? RequiredEvidence { get; init; }
+
+    /// <summary>
+    /// Audit basis for <see cref="Severity"/> (impact rationale, or the
+    /// reason a review-needed default was applied). Null on legacy rules.
+    /// </summary>
+    public string? SeverityBasis { get; init; }
+
     /// <summary>SHA-256 of the predicate expression. Changes if the gate changes.</summary>
-     public ContentHash PredicateHash() => ContentHash.OfString(Predicate);
+    public ContentHash PredicateHash() => ContentHash.OfString(Predicate);
 
     /// <summary>SHA-256 of the lambda expression. Changes if the determination changes.</summary>
     public ContentHash LambdaHash() => ContentHash.OfString(Lambda);
@@ -289,6 +360,26 @@ public sealed record Rule(
                 .OrderBy(f => f, StringComparer.Ordinal);
             parts.Add("requiredFactsAny:" + string.Join("\u001f", facts));
         }
+        // Review-annotation-quality fields fold in only when set so legacy
+        // rules keep byte-identical fingerprints.
+        if (Obligation is { } obligation)
+            parts.Add("obligation:" + obligation);
+        if (Scope is { } scope)
+        {
+            parts.Add("scope.terms:" + string.Join("\u001f", scope.Terms.Select(t => t.Trim()).OrderBy(t => t, StringComparer.Ordinal)));
+            if (!string.IsNullOrWhiteSpace(scope.Description))
+                parts.Add("scope.description:" + scope.Description.Trim());
+        }
+        if (RequiredEvidence is { Count: > 0 })
+        {
+            var evidence = RequiredEvidence
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e.Trim())
+                .OrderBy(e => e, StringComparer.Ordinal);
+            parts.Add("requiredEvidence:" + string.Join("\u001f", evidence));
+        }
+        if (!string.IsNullOrWhiteSpace(SeverityBasis))
+            parts.Add("severityBasis:" + SeverityBasis.Trim());
         return ContentHash.Compose(parts.ToArray());
     }
 }

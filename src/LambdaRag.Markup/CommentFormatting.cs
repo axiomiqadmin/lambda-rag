@@ -137,7 +137,7 @@ public static class CommentFormatting
     {
         var banner = verdict.Outcome == VerdictOutcome.Error
             ? ErrorBanner
-            : SeverityBanner(rule.Severity);
+            : SeverityBanner(RuleSeverityPolicy.EffectiveSeverity(rule));
 
         var sb = new System.Text.StringBuilder();
         sb.Append(banner);
@@ -151,6 +151,15 @@ public static class CommentFormatting
         if (!string.IsNullOrWhiteSpace(rule.NaturalLanguage))
         {
             sb.Append("\n\n").Append(rule.NaturalLanguage);
+        }
+
+        if (verdict.Outcome != VerdictOutcome.Error && RuleSeverityPolicy.NeedsReview(rule))
+        {
+            sb.Append("\n\nSeverity review needed: configured ")
+                .Append(rule.Severity)
+                .Append(" lacks a validated impact basis; shown as ")
+                .Append(RuleSeverityPolicy.ReviewNeededDefault)
+                .Append(" pending review.");
         }
 
         if (verdict.Outcome == VerdictOutcome.Fail
@@ -174,6 +183,141 @@ public static class CommentFormatting
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Body for a coalesced comment: same obligation + same location,
+    /// possibly several rules. Keeps every rule reference and every
+    /// distinct remediation. Banner is the most severe among the members
+    /// (banner definitions themselves are unchanged).
+    /// </summary>
+    public static string BuildGroupedBody(IReadOnlyList<(Verdict Verdict, Rule? Rule)> members)
+    {
+        var anyError = members.Any(m => m.Verdict.Outcome == VerdictOutcome.Error);
+        string banner;
+        if (anyError)
+        {
+            banner = ErrorBanner;
+        }
+        else
+        {
+            var severity = members.Where(m => m.Rule is not null)
+                .Select(m => RuleSeverityPolicy.EffectiveSeverity(m.Rule!))
+                .DefaultIfEmpty(RuleSeverity.Suggestion).Max();
+            banner = members.Any(m => m.Rule is not null) ? SeverityBanner(severity) : ErrorBanner;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(banner);
+
+        var ruleWithText = members.Select(m => m.Rule).FirstOrDefault(r => r is not null);
+        if (ruleWithText is not null)
+        {
+            if (ruleWithText.Metadata.TryGetValue("synopsis", out var synopsis)
+                && !string.IsNullOrWhiteSpace(synopsis))
+                sb.Append('\n').Append(synopsis);
+            if (!string.IsNullOrWhiteSpace(ruleWithText.NaturalLanguage))
+                sb.Append("\n\n").Append(ruleWithText.NaturalLanguage);
+        }
+
+        var ruleCount = members.Select(m => m.Verdict.RuleId).Distinct(StringComparer.Ordinal).Count();
+        sb.Append("\n\nGrouped finding: ").Append(ruleCount)
+          .Append(" rule(s) share this obligation and location.");
+
+        foreach (var m in members
+            .Where(m => m.Verdict.Outcome != VerdictOutcome.Error
+                        && m.Rule is not null
+                        && RuleSeverityPolicy.NeedsReview(m.Rule))
+            .OrderBy(m => m.Verdict.RuleId, StringComparer.Ordinal))
+        {
+            sb.Append("\n\nSeverity review needed (").Append(m.Verdict.RuleId)
+                .Append("): configured ").Append(m.Rule!.Severity)
+                .Append(" lacks a validated impact basis; shown as ")
+                .Append(RuleSeverityPolicy.ReviewNeededDefault)
+                .Append(" pending review.");
+        }
+
+        var remediations = members
+            .Where(m => m.Verdict.Outcome == VerdictOutcome.Fail
+                        && !string.IsNullOrWhiteSpace(m.Verdict.RemediationText))
+            .GroupBy(m => m.Verdict.RemediationText!.Trim(), StringComparer.Ordinal)
+            .ToList();
+        if (remediations.Count == 1)
+        {
+            sb.Append("\n\nSuggested remediation: ").Append(remediations[0].Key);
+        }
+        else
+        {
+            foreach (var r in remediations)
+            {
+                sb.Append("\n\nSuggested remediation (")
+                  .Append(string.Join(", ", r.Select(x => x.Verdict.RuleId).Distinct(StringComparer.Ordinal)))
+                  .Append("): ").Append(r.Key);
+            }
+        }
+
+        foreach (var m in members.Where(m => m.Verdict.Outcome == VerdictOutcome.Error
+                                             && !string.IsNullOrWhiteSpace(m.Verdict.ErrorMessage)))
+        {
+            sb.Append("\n\nDetail (").Append(m.Verdict.RuleId).Append("): ").Append(m.Verdict.ErrorMessage);
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (verdict, rule) in members)
+        {
+            var version = rule?.Version;
+            var key = verdict.RuleId + "\u0000" + version;
+            if (!seen.Add(key)) continue;
+            sb.Append("\n[Policy Reference: ").Append(verdict.RuleId);
+            if (!string.IsNullOrWhiteSpace(version)) sb.Append(" v").Append(version);
+            sb.Append(']');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Body for a scoped-gap comment: a missing requirement within the
+    /// anchored section, explicitly not a quote of contradictory text.
+    /// </summary>
+    public static string BuildScopedGapBody(IReadOnlyList<(Verdict Verdict, Rule? Rule)> members)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(ScopedGapBanner);
+        var rule = members.Select(m => m.Rule).FirstOrDefault(r => r is not null);
+        if (rule is not null)
+        {
+            if (rule.Metadata.TryGetValue("synopsis", out var synopsis) && !string.IsNullOrWhiteSpace(synopsis))
+                sb.Append('\n').Append(synopsis);
+            if (!string.IsNullOrWhiteSpace(rule.NaturalLanguage))
+                sb.Append("\n\n").Append(rule.NaturalLanguage);
+        }
+        else
+        {
+            sb.Append("\n\nRule ").Append(members[0].Verdict.RuleId).Append(" reported a gap.");
+        }
+        sb.Append("\n\nScope: this requirement is not addressed in the highlighted section. "
+                  + "The highlight marks the section, not contradictory text.");
+
+        foreach (var r in members
+            .Where(m => !string.IsNullOrWhiteSpace(m.Verdict.RemediationText))
+            .Select(m => m.Verdict.RemediationText!.Trim())
+            .Distinct(StringComparer.Ordinal))
+        {
+            sb.Append("\n\nSuggested remediation: ").Append(r);
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (verdict, r) in members)
+        {
+            if (!seen.Add(verdict.RuleId + "\u0000" + r?.Version)) continue;
+            sb.Append("\n[Policy Reference: ").Append(verdict.RuleId);
+            if (!string.IsNullOrWhiteSpace(r?.Version)) sb.Append(" v").Append(r!.Version);
+            sb.Append(']');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Banner for scoped-gap comments (missing requirement, not a contradiction).</summary>
+    public const string ScopedGapBanner = "\U0001F4CB GAP \u2014 Missing Requirement in This Section";
 
     /// <summary>
     /// Build the comment body for an opt-in Pass verdict (markup mode's

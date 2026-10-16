@@ -12,15 +12,15 @@
   "score": 0,
   "totalRules": 5,
   "passed": 0,
-  "failed": 5,
+  "failed": 0,
   "notApplicable": 0,
   "errored": 0,
   "verdicts": [
     {
-      "id": "lr1:a63135e99799d783a90daa03e537940135ceb51d8fffc7057131ef6841624b9b",
+      "id": "lr1:d35da6ca79eccd37871c8601232dbbde1a6e3479e357a1f6dda4b8e683c79306",
       "ruleId": "CAN-CONTRACT-GOV-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"Ontario\") || input1.text.Contains(\"Quebec\") || input1.text.Contains(\"British Columbia\") || input1.text.Contains(\"Alberta\") || input1.text.Contains(\"Canada\") || input1.text.Contains(\"federal laws of Canada\")",
       "evaluatedInput": {
         "id": "s_00000007",
@@ -86,19 +86,17 @@
       "matchedSectionId": "s_00000007",
       "remediationText": "Replace the 7. Governing Law clause with: \"This Agreement is governed by the laws of the Province of Ontario and the federal laws of Canada applicable therein. The exclusive venue for any dispute is the courts of Ontario.\"",
       "predicateText": "input1.category == \"governing_law\"",
-      "clauseSpan": {
-        "documentId": "lr1:24fcc4fa49136a1aafbc3840470d8779cac6246dc2ffa9fb4db20809d13c6f69",
-        "charStart": 1434,
-        "charLength": 193,
-        "headingPath": "/Master Services Agreement — Canadian Customer - US-Drafted Vendor Template/7. Governing Law",
-        "charEnd": 1627
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:f1ae37dfcf364144c85099bfc8f817df93b24231b5b493193d26be0c7852e3e9",
+      "id": "lr1:bca25796809b80a86258aa88c6321eb122000aa5f2e711c8f987e50db30772f0",
       "ruleId": "CAN-CONTRACT-LIAB-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"capped\") || input1.text.Contains(\"cap\") || input1.text.Contains(\"limited to\") || input1.text.Contains(\"shall not exceed\") || input1.text.Contains(\"aggregate liability\")) && (input1.text.Contains(\"fees\") || input1.text.Contains(\"amounts paid\") || input1.text.Contains(\"twelve months\") || input1.text.Contains(\"12 months\"))",
       "evaluatedInput": {
         "id": "s_00000005",
@@ -168,19 +166,17 @@
       "matchedSectionId": "s_00000005",
       "remediationText": "Replace the 5. Liability clause with: \"Each party's aggregate liability under this Agreement shall not exceed the fees paid by Customer to Provider in the twelve (12) months preceding the event giving rise to the claim.\"",
       "predicateText": "input1.category == \"liability\"",
-      "clauseSpan": {
-        "documentId": "lr1:24fcc4fa49136a1aafbc3840470d8779cac6246dc2ffa9fb4db20809d13c6f69",
-        "charStart": 980,
-        "charLength": 176,
-        "headingPath": "/Master Services Agreement — Canadian Customer - US-Drafted Vendor Template/5. Liability",
-        "charEnd": 1156
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:6ef7dc8c54541e580217801114729a073e4a4f82be6860b2ed22bec70add432a",
+      "id": "lr1:4193473509a3e6fbfa2112e7d890d2a4a46f3bc957993be99664a9f654743823",
       "ruleId": "CAN-CONTRACT-PAY-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"30 days\") || input1.text.Contains(\"15 days\") || input1.text.Contains(\"net 30\") || input1.text.Contains(\"Net 30\")",
       "evaluatedInput": {
         "id": "s_00000003",
@@ -248,19 +244,17 @@
       "matchedSectionId": "s_00000003",
       "remediationText": "Replace the 3. Payment and Compensation clause with: \"Customer shall pay all undisputed invoices within thirty (30) days of receipt of a valid invoice.\"",
       "predicateText": "input1.category == \"payment_terms\"",
-      "clauseSpan": {
-        "documentId": "lr1:24fcc4fa49136a1aafbc3840470d8779cac6246dc2ffa9fb4db20809d13c6f69",
-        "charStart": 558,
-        "charLength": 173,
-        "headingPath": "/Master Services Agreement — Canadian Customer - US-Drafted Vendor Template/3. Payment and Compensation",
-        "charEnd": 731
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:f3ca81246ea22148e8e132585df08c188390ff5edbc6a1aa1ae0e4830a21050f",
+      "id": "lr1:68a94d50402f1013718f7b33b4ed93399eb511a0d6b00f7fc86eeb001de43918",
       "ruleId": "CAN-CONTRACT-PRIVACY-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "input1.text.Contains(\"PIPEDA\") || input1.text.Contains(\"Personal Information Protection and Electronic Documents Act\") || input1.text.Contains(\"Law 25\") || input1.text.Contains(\"BC PIPA\") || input1.text.Contains(\"Alberta PIPA\")",
       "evaluatedInput": {
         "id": "s_00000004",
@@ -328,19 +322,17 @@
       "matchedSectionId": "s_00000004",
       "remediationText": "Add to the 4. Privacy and Data Processing clause: \"Provider shall process Personal Information only as required to deliver the Services and in compliance with the Personal Information Protection and Electronic Documents Act (PIPEDA) and any substantially similar provincial privacy legislation applicable to the data subjects.\"",
       "predicateText": "input1.category == \"privacy\"",
-      "clauseSpan": {
-        "documentId": "lr1:24fcc4fa49136a1aafbc3840470d8779cac6246dc2ffa9fb4db20809d13c6f69",
-        "charStart": 754,
-        "charLength": 225,
-        "headingPath": "/Master Services Agreement — Canadian Customer - US-Drafted Vendor Template/4. Privacy and Data Processing",
-        "charEnd": 979
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     },
     {
-      "id": "lr1:0cd69ab885b84333534faa6c58267118701263fcb3dd4146de23b766b1f91578",
+      "id": "lr1:7bd35d4f1b2a5c168d07c85f03b52aa9e37b3da1a7bca783e6f053c26adcf06f",
       "ruleId": "CAN-CONTRACT-TERM-001",
       "ruleSetVersion": "1.0.0",
-      "outcome": "Fail",
+      "outcome": "Gap",
       "lambdaText": "(input1.text.Contains(\"material breach\") || input1.text.Contains(\"uncured breach\") || input1.text.Contains(\"for cause\")) && (input1.text.Contains(\"convenience\") || input1.text.Contains(\"without cause\")) && (input1.text.Contains(\"days\") || input1.text.Contains(\"notice\"))",
       "evaluatedInput": {
         "id": "s_00000006",
@@ -399,10 +391,10 @@
       },
       "sourceSpan": {
         "documentId": "lr1:24fcc4fa49136a1aafbc3840470d8779cac6246dc2ffa9fb4db20809d13c6f69",
-        "charStart": 1234,
-        "charLength": 14,
+        "charStart": 1160,
+        "charLength": 17,
         "headingPath": "/Master Services Agreement — Canadian Customer - US-Drafted Vendor Template/6. Termination",
-        "charEnd": 1248
+        "charEnd": 1177
       },
       "errorMessage": "Rule 'CAN-CONTRACT-TERM-001' failed: The contract must include both a termination-for-cause clause and a termination-for-convenience clause with a defined notice period.",
       "evidenceQuotes": [
@@ -412,15 +404,13 @@
       "matchedSectionId": "s_00000006",
       "remediationText": "Update 6. Termination to include both: (a) termination for material uncured breach on stated notice; and (b) termination for convenience by Customer on a defined notice period (typically 30–90 days), per SACC general-conditions baselines.",
       "predicateText": "input1.category == \"termination\"",
-      "clauseSpan": {
-        "documentId": "lr1:24fcc4fa49136a1aafbc3840470d8779cac6246dc2ffa9fb4db20809d13c6f69",
-        "charStart": 1179,
-        "charLength": 250,
-        "headingPath": "/Master Services Agreement — Canadian Customer - US-Drafted Vendor Template/6. Termination",
-        "charEnd": 1429
-      }
+      "findingKind": "missing_requirement",
+      "anchorKind": "section_scope",
+      "unanchoredReason": "missing_requirement_no_quote",
+      "rewriteEligible": false,
+      "scopeBasis": "predicate_scoped"
     }
   ],
   "generatedAt": "2000-01-01T00:00:00+00:00",
-  "gaps": 0
+  "gaps": 5
 }
