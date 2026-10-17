@@ -74,6 +74,13 @@ public enum RuleObligation { Must, Should, May }
 public sealed record RuleScope(IReadOnlyList<string> Terms, string? Description = null);
 
 /// <summary>
+/// An authored scope declaration: when any evidence phrase occurs in the
+/// document, the named fact holds the given values (e.g. name "platform",
+/// values ["acme-runtime"]).
+/// </summary>
+public sealed record ScopeFact(string Name, IReadOnlyList<string> Values, IReadOnlyList<string> EvidencePhrases);
+
+/// <summary>
 /// A rule extracted from a source policy. The combination of
 /// (selector, predicate, lambda, applies_to_schema) is what makes rule
 /// application 100% deterministic at runtime.
@@ -273,6 +280,23 @@ public sealed record Rule(
     /// </summary>
     public string? SeverityBasis { get; init; }
 
+    /// <summary>
+    /// Authored semantic alternatives. Each inner list is one required concept;
+    /// a sentence proves the rule when it contains at least one alternative
+    /// (case-insensitive substring) from EVERY group. Derived from the policy
+    /// at authoring time and signed with the ruleset; never from the document
+    /// under review. Null/empty = not authored (the lambda alone decides).
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<string>>? RequiredConcepts { get; init; }
+
+    /// <summary>
+    /// Authored applicability condition: fact name → accepted values. The rule
+    /// is NotApplicable only when the ruleset's <see cref="RuleSet.ScopeFacts"/>
+    /// establish that fact (via document evidence) and none of these values
+    /// is among the established ones.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>>? AppliesWhen { get; init; }
+
     /// <summary>SHA-256 of the predicate expression. Changes if the gate changes.</summary>
     public ContentHash PredicateHash() => ContentHash.OfString(Predicate);
 
@@ -380,6 +404,10 @@ public sealed record Rule(
         }
         if (!string.IsNullOrWhiteSpace(SeverityBasis))
             parts.Add("severityBasis:" + SeverityBasis.Trim());
+        if (RequiredConcepts is { Count: > 0 })
+            parts.Add("requiredConcepts:" + string.Join("\u001e", RequiredConcepts.Select(g => string.Join("\u001f", g.Select(t => t.Trim().ToLowerInvariant()).OrderBy(t => t, StringComparer.Ordinal)))));
+        if (AppliesWhen is { Count: > 0 })
+            parts.Add("appliesWhen:" + string.Join("\u001e", AppliesWhen.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => kv.Key + "=" + string.Join("\u001f", kv.Value.Select(t => t.Trim().ToLowerInvariant()).OrderBy(t => t, StringComparer.Ordinal)))));
         return ContentHash.Compose(parts.ToArray());
     }
 }
@@ -435,6 +463,14 @@ public sealed record RuleSet(
     /// </summary>
     public FactSchema? FactSchema { get; init; }
 
+    /// <summary>
+    /// Authored scope declarations. A declaration is established only when one
+    /// of its <see cref="ScopeFact.EvidencePhrases"/> appears in the document
+    /// under review; rules then test their <see cref="Rule.AppliesWhen"/>
+    /// against the established values. Null/empty = no scope inference.
+    /// </summary>
+    public IReadOnlyList<ScopeFact>? ScopeFacts { get; init; }
+
     public ContentHash Fingerprint()
     {
         var parts = new List<string> { Id, Version, Domain };
@@ -462,6 +498,9 @@ public sealed record RuleSet(
         // declares a schema, so pre-Pillar-12 rulesets keep byte-identity.
         if (FactSchema is not null)
             parts.Add("factSchema:" + FactSchema.Fingerprint().Value);
+        if (ScopeFacts is { Count: > 0 })
+            foreach (var f in ScopeFacts.OrderBy(f => f.Name, StringComparer.Ordinal).ThenBy(f => string.Join("\u001f", f.Values), StringComparer.Ordinal))
+                parts.Add($"scopeFact:{f.Name}={string.Join("\u001f", f.Values.Select(v => v.Trim().ToLowerInvariant()).OrderBy(v => v, StringComparer.Ordinal))}|{string.Join("\u001f", f.EvidencePhrases.Select(v => v.Trim().ToLowerInvariant()).OrderBy(v => v, StringComparer.Ordinal))}");
         return ContentHash.Compose(parts.ToArray());
     }
 }

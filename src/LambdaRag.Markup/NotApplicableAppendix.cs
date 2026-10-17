@@ -9,7 +9,8 @@ namespace LambdaRag.Markup;
 /// <summary>Why a rule resolved to N/A, expressed as a stable category.</summary>
 public enum NotApplicableCategory
 {
-    TechnologyNotRequired,
+    ExcludedTechNotRequired,
+    ExcludedNotRequired,
     ProcessOrGovernance,
     ConditionNotTriggered,
     OptionalGuidance,
@@ -38,12 +39,6 @@ public static class NotApplicableAppendix
     public const string AppendixHeadingText = "Appendix: Rules Not Applicable to This Document";
     public const string SubsectionHeadingText = "Rules Not Applicable";
     public const string NoSectionText = "None identified";
-
-    private static readonly Regex ProcessPattern = new(
-        @"\b(reviewed|approved|endorsed|ratified|signed[- ]off|sign[- ]off|approval|review(?:ed)? by|"
-        + @"committee|board|council|steering|governance|stakeholder|owner|training|audit(?:ed|s)?|"
-        + @"annual(?:ly)?|quarterly|periodic(?:ally)?|exception process|escalat\w*|waiver|attest\w*)\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex TechNounPattern = new(
         @"\b(policy engine|cluster|kubernetes|container|registry|service mesh|gateway|firewall|load balancer|"
@@ -104,9 +99,10 @@ public static class NotApplicableAppendix
 
     public static string CategoryLabel(NotApplicableCategory c) => c switch
     {
-        NotApplicableCategory.TechnologyNotRequired => "Technology not required",
+        NotApplicableCategory.ExcludedTechNotRequired => "EXCLUDED_TECH_NOT_REQUIRED",
+        NotApplicableCategory.ExcludedNotRequired => "EXCLUDED_NOT_REQUIRED",
         NotApplicableCategory.ProcessOrGovernance => "Process / governance (outside document)",
-        NotApplicableCategory.ConditionNotTriggered => "Condition not triggered",
+        NotApplicableCategory.ConditionNotTriggered => "Condition not established",
         NotApplicableCategory.OptionalGuidance => "Optional guidance",
         NotApplicableCategory.RequiredInformationNotStated => "Information not stated",
         NotApplicableCategory.ScopeNotEstablished => "Scope not established",
@@ -117,7 +113,20 @@ public static class NotApplicableAppendix
     {
         var text = rule is null ? string.Empty : $"{rule.NaturalLanguage} {rule.EvidenceQuote}";
 
-        if (ProcessPattern.IsMatch(rule?.NaturalLanguage ?? string.Empty))
+        if (diagnosticTag is not null
+            && diagnosticTag.StartsWith(AbsenceEvidence.ExcludedTagPrefix, StringComparison.Ordinal))
+        {
+            var statement = diagnosticTag[AbsenceEvidence.ExcludedTagPrefix.Length..];
+            var tech = ExtractTechnologies(text);
+            return tech.Count > 0
+                ? (NotApplicableCategory.ExcludedTechNotRequired,
+                    $"The document states the technology is not present ({string.Join(", ", tech)}): \"{statement}\"")
+                : (NotApplicableCategory.ExcludedNotRequired,
+                    $"The document states the rule's subject or condition does not apply: \"{statement}\"");
+        }
+
+        if (diagnosticTag == AbsenceEvidence.ProcessTag
+            || (rule is not null && AbsenceEvidence.IsOutOfDocumentProcess(rule)))
         {
             return (NotApplicableCategory.ProcessOrGovernance,
                 "The rule concerns an organizational process or an external actor (for example a reviewing "
@@ -125,19 +134,12 @@ public static class NotApplicableAppendix
                 + "Verify it through the governance process, not this document.");
         }
 
-        var tech = ExtractTechnologies(text);
-        if (tech.Count > 0)
-        {
-            return (NotApplicableCategory.TechnologyNotRequired,
-                $"The rule applies to {string.Join(", ", tech)}, which the document never mentions. "
-                + "The solution may not need this technology; if it does, the design should describe it.");
-        }
-
         if (rule?.Applicability == RuleApplicability.Conditional)
         {
             return (NotApplicableCategory.ConditionNotTriggered,
                 "The rule applies only when its trigger condition holds, and no section of the document "
-                + "establishes that condition.");
+                + "establishes that condition. Evidence needed: a statement that the condition is absent, "
+                + "or the control the rule requires if the condition holds.");
         }
 
         if (rule?.Applicability == RuleApplicability.Optional)
@@ -153,7 +155,8 @@ public static class NotApplicableAppendix
             if (m.Success)
             {
                 return (NotApplicableCategory.RequiredInformationNotStated,
-                    $"The document does not state the information this rule evaluates: {m.Groups["f"].Value}.");
+                    $"The document does not state the information this rule evaluates: {m.Groups["f"].Value}. "
+                    + "Evidence needed: the stated control, decision or owner, or an explicit statement that it does not apply.");
             }
             if (diagnosticTag.StartsWith("fact_mode:no_scoped_sections", StringComparison.Ordinal))
             {
@@ -168,7 +171,8 @@ public static class NotApplicableAppendix
         }
 
         return (NotApplicableCategory.TopicNotAddressed,
-            "No section of the document is relevant to this rule's topic, so it was not evaluated.");
+            "No section of the document is relevant to this rule's topic, so it was not evaluated. "
+            + "Evidence needed: either state why the topic is out of scope, or document the control the rule requires.");
     }
 
     private static List<string> ExtractTechnologies(string text)
@@ -326,8 +330,15 @@ public static class NotApplicableAppendix
         content.Add(BuildBodyParagraph(
             rows.Count == 0
                 ? "Every rule was applicable to this document."
-                : "These rules were not evaluated because they do not apply to this document. "
-                  + "Each row gives the rule, the section it would most likely belong in, and why it did not apply."));
+                : "These rules were not confirmed as compliant from the available document evidence. "
+                  + "A rule is classified as Not applicable only when the document establishes that the relevant "
+                  + "technology, workload characteristic, data class, operating model, or triggering condition is absent. "
+                  + "When the rule is relevant to the documented solution but the required control, decision, evidence, "
+                  + "ownership, or operating process is missing, the rule is classified as a Gap. "
+                  + "Rows categorised EXCLUDED_TECH_NOT_REQUIRED or EXCLUDED_NOT_REQUIRED cite the document statement "
+                  + "that excludes the technology or condition; other rows concern processes outside the document. "
+                  + "Each row identifies the most relevant document section, the classification rationale, "
+                  + "and the evidence needed to resolve the finding."));
         if (rows.Count > 0) content.Add(BuildTable(rows));
 
         foreach (var element in content)

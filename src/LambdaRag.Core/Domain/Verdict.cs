@@ -16,7 +16,18 @@ namespace LambdaRag.Core.Domain;
 ///   intersect the resolved doc kind). The audit trail still cites the
 ///   rule so coverage is never silently dropped.
 /// </summary>
-public enum VerdictOutcome { Pass, Fail, NotApplicable, Gap, Error, Skipped }
+public enum VerdictOutcome { Pass, Fail, NotApplicable, Gap, Error, Skipped, Partial }
+
+/// <summary>Stable <see cref="Verdict.ReasonCode"/> values.</summary>
+public static class ReasonCodes
+{
+    /// <summary>The rule's required terms appear, but no sentence also carries a narrowing qualifier ("only", "external").</summary>
+    public const string MissingRequiredQualifier = "MISSING_REQUIRED_QUALIFIER";
+    /// <summary>The rule's required terms are only satisfied by combining separate sentences.</summary>
+    public const string EvidenceNotCohesive = "EVIDENCE_NOT_COHESIVE";
+    public const string NonNormative = "NON_NORMATIVE";
+    public const string ScopeFactExcluded = "SCOPE_FACT_EXCLUDED";
+}
 
 /// <summary>
 /// One rule applied to one matched section. Carries the full audit trail
@@ -118,7 +129,32 @@ public sealed record Verdict(
     /// <see cref="ScopeBases"/>), recorded for audit.
     /// </summary>
     public string? ScopeBasis { get; init; }
+
+    /// <summary>
+    /// For a Pass under strict placement: the single reviewed-document
+    /// sentence that satisfied the rule on its own (the text
+    /// <see cref="SourceSpan"/> points at). Null otherwise.
+    /// </summary>
+    public string? DocumentEvidence { get; init; }
+
+    /// <summary>
+    /// For the primary Pass of a rule that also passed in other sections:
+    /// those other proving sentences, kept in the report but not commented.
+    /// </summary>
+    public IReadOnlyList<SupportingEvidence>? SupportingEvidence { get; init; }
+
+    /// <summary>Machine-readable explanation of a Partial / Skipped decision. Null otherwise.</summary>
+    public string? ReasonCode { get; init; }
+
+    /// <summary>Rule conditions the evidence satisfied (Partial only).</summary>
+    public IReadOnlyList<string>? SatisfiedConditions { get; init; }
+
+    /// <summary>Rule conditions the evidence did not satisfy (Partial only).</summary>
+    public IReadOnlyList<string>? MissingConditions { get; init; }
 }
+
+/// <summary>A secondary proving sentence for a rule's primary Pass verdict.</summary>
+public sealed record SupportingEvidence(string? SectionId, string? HeadingPath, SourceSpan Span, string Quote);
 
 /// <summary>Stable <see cref="Verdict.FindingKind"/> values.</summary>
 public static class FindingKinds
@@ -126,6 +162,8 @@ public static class FindingKinds
     public const string Contradiction = "contradiction";
     public const string MissingRequirement = "missing_requirement";
     public const string Unclassified = "unclassified";
+    /// <summary>The rule is relevant to the section but no single sentence proves every part of it.</summary>
+    public const string PartialEvidence = "partial_evidence";
 }
 
 /// <summary>Stable <see cref="Verdict.AnchorKind"/> values.</summary>
@@ -135,6 +173,8 @@ public static class AnchorKinds
     public const string RuleAnchor = "rule_anchor";
     public const string SectionScope = "section_scope";
     public const string Unresolved = "unresolved";
+    /// <summary>The span is the single document sentence that proves a Pass.</summary>
+    public const string EvidenceSentence = "evidence_sentence";
 }
 
 /// <summary>Stable <see cref="Verdict.ClauseKind"/> values.</summary>
@@ -151,6 +191,7 @@ public static class UnanchoredReasons
     public const string NoLiteralEvidence = "no_literal_evidence";
     public const string NoParagraphMetadata = "no_paragraph_metadata";
     public const string NoSectionText = "no_section_text";
+    public const string PartialEvidence = "partial_evidence_no_single_sentence";
 }
 
 /// <summary>Stable <see cref="Verdict.ScopeBasis"/> values.</summary>
@@ -202,6 +243,9 @@ public sealed record ComplianceReport(
     /// byte-identical when no doc-kind gating is in play.
     /// </summary>
     public int? Skipped { get; init; }
+
+    /// <summary>Count of <see cref="VerdictOutcome.Partial"/> verdicts. Null (omitted) when none.</summary>
+    public int? Partials { get; init; }
 
     /// <summary>
     /// Pillar 1 (#116) — true when every rule the engine ran was skipped
@@ -295,4 +339,7 @@ public sealed record RuleSummary(
     /// verdict emitted). Lets tooling jump straight to the anchor.
     /// </summary>
     public string? RepresentativeVerdictId { get; init; }
+
+    /// <summary>Count of Partial verdicts for this rule. Null (omitted) when none.</summary>
+    public int? PartialCount { get; init; }
 }

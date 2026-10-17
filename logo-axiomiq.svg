@@ -1,0 +1,39 @@
+<svg width="1200" height="260" viewBox="0 0 1200 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="brandGradient" x1="18" y1="14" x2="205" y2="210" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00E0A4"/>
+      <stop offset="0.5" stop-color="#2AD3C7"/>
+      <stop offset="1" stop-color="#2B8CFF"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(110 72) rotate(90) scale(138)">
+      <stop stop-color="#2AD3C7" stop-opacity="0.52"/>
+      <stop offset="1" stop-color="#2AD3C7" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#0B53C4" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(12 12)">
+    <rect x="0" y="0" width="220" height="220" rx="52" fill="#081A2A"/>
+    <rect x="14" y="14" width="192" height="192" rx="40" fill="url(#brandGradient)" opacity="0.12"/>
+    <circle cx="110" cy="110" r="84" fill="url(#glow)"/>
+
+    <g filter="url(#softShadow)">
+      <path d="M58 160L110 41L162 160H135L121 126H99L85 160H58Z" fill="url(#brandGradient)"/>
+      <path d="M94 92H126L110 126L94 92Z" fill="#081A2A" opacity="0.8"/>
+      <path d="M90 136H130" stroke="#E8FFF9" stroke-width="8" stroke-linecap="round" opacity="0.7"/>
+    </g>
+
+    <path d="M142 152C160 144 173 130 177 109" stroke="url(#brandGradient)" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="178" cy="108" r="12" fill="#081A2A" stroke="url(#brandGradient)" stroke-width="6"/>
+    <circle cx="178" cy="108" r="4" fill="#EAFDFF"/>
+  </g>
+
+  <g transform="translate(280 58)">
+    <text x="0" y="78" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="104" font-weight="700" letter-spacing="-3" fill="#0F1B2D">Axiom</text>
+    <text x="432" y="78" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="104" font-weight="800" letter-spacing="-3" fill="url(#brandGradient)">IQ</text>
+    <text x="0" y="136" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="48" font-weight="700" letter-spacing="10" fill="#5B6C84">LABS</text>
+    <rect x="0" y="156" width="610" height="8" rx="4" fill="url(#brandGradient)" opacity="0.92"/>
+  </g>
+</svg>

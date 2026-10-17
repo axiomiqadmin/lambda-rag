@@ -168,7 +168,7 @@ public class FactModeEvaluationTests
     }
 
     [Fact]
-    public async Task Compound_Missing_Required_Fact_Yields_NotApplicable_On_Mandatory()
+    public async Task Compound_Missing_Required_Fact_Yields_Gap_On_Mandatory()
     {
         var sidecar = Sidecar(new()
         {
@@ -179,17 +179,16 @@ public class FactModeEvaluationTests
             "encryption_declared", "key_rotation_days");
         var svc = Build(sidecar);
         var report = await svc.EvaluateAsync(Set(rule), Doc());
-        // Contract: any RequiredFact null in the union → doc silent → NA
-        // (advisory). The doc doesn't discuss the concept; softer signal
-        // than Gap. Diagnostic tag preserved in ErrorMessage.
-        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        // Contract: any RequiredFact null in the union → doc silent → Gap
+        // for Mandatory rules. Diagnostic tag preserved in ErrorMessage.
+        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.Gap);
         report.Verdicts[0].ErrorMessage.Should().Contain("encryption_declared");
     }
 
     // ── RequiredFactsAny (batch 3, issue #154) ─────────────────────────────
 
     [Fact]
-    public async Task RequiredFactsAny_All_Null_Yields_NotApplicable()
+    public async Task RequiredFactsAny_All_Null_Yields_Gap()
     {
         // Section is in scope (explicit RuleScope), but none of the
         // OR-alternatives are decided by the doc — Any-gate fires NA
@@ -205,7 +204,7 @@ public class FactModeEvaluationTests
             requiredFactsAny: new[] { "encryption_declared", "data_classification" });
         var svc = Build(sidecar);
         var report = await svc.EvaluateAsync(Set(rule), Doc());
-        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.Gap);
         report.Verdicts[0].ErrorMessage.Should().Contain("missing_required_facts_any");
         report.Verdicts[0].ErrorMessage.Should().Contain("encryption_declared");
         report.Verdicts[0].ErrorMessage.Should().Contain("data_classification");
@@ -261,7 +260,7 @@ public class FactModeEvaluationTests
             requiredFactsAny: new[] { "encryption_declared", "data_classification" });
         var svc = Build(sidecar);
         var report = await svc.EvaluateAsync(Set(rule), Doc());
-        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.Gap);
         report.Verdicts[0].ErrorMessage.Should().Contain("missing_required_facts_any");
     }
 
@@ -335,7 +334,7 @@ public class FactModeEvaluationTests
     }
 
     [Fact]
-    public async Task No_Scoped_Sections_Yields_NotApplicable_For_Mandatory_Rule()
+    public async Task No_Scoped_Sections_Yields_Gap_For_Mandatory_Rule()
     {
         var sidecar = Sidecar(new()
         {
@@ -346,9 +345,9 @@ public class FactModeEvaluationTests
             "encryption_declared", "key_rotation_days");
         var svc = Build(sidecar);
         var report = await svc.EvaluateAsync(Set(rule), Doc());
-        // Contract: no sidecar section mentions any RequiredFact → NA
-        // (doc out-of-scope for this rule). Softer signal than Gap.
-        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        // Contract: no sidecar section mentions any RequiredFact → Gap
+        // for a Mandatory rule (absent evidence is not non-applicability).
+        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.Gap);
         report.Verdicts[0].ErrorMessage.Should().Contain("no_scoped_sections");
     }
 

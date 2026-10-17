@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using LambdaRag.Core;
 using LambdaRag.Core.Abstractions;
 using LambdaRag.Core.Domain;
@@ -163,6 +164,7 @@ public sealed class EvaluationService
                 .ConfigureAwait(false);
         }
 
+        var establishedScope = AbsenceEvidence.EstablishScopeFacts(ruleSet.ScopeFacts, AbsenceEvidence.CollectText(document.Graph));
         var verdicts = new List<Verdict>();
         foreach (var rule in ruleSet.Rules.OrderBy(r => r.Id, StringComparer.Ordinal))
         {
@@ -186,6 +188,19 @@ public sealed class EvaluationService
                 continue;
             }
 
+            if (_applicabilityFloor > 0.0 && IsNonNormative(rule))
+            {
+                verdicts.Add(BuildVerdict(
+                    rule, ruleSet,
+                    outcome: VerdictOutcome.Skipped,
+                    section: null,
+                    input: new JsonObject(),
+                    span: rule.SourceSpan,
+                    error: "non_normative: rule text states no requirement (no shall/must/should/required)",
+                    remediationText: null) with { ReasonCode = ReasonCodes.NonNormative });
+                continue;
+            }
+
             // Pillar 12 (#153) — fact-mode rules follow a wholly separate
             // path: no per-section selector loop, no predicate gate, no
             // lambda-per-section. The lambda is compiled once against the
@@ -199,18 +214,33 @@ public sealed class EvaluationService
                 continue;
             }
 
+            var scopeExclusion = AbsenceEvidence.FindScopeExclusion(rule, establishedScope);
+            if (scopeExclusion is not null)
+            {
+                verdicts.Add(BuildVerdict(
+                    rule, ruleSet,
+                    outcome: VerdictOutcome.NotApplicable,
+                    section: null,
+                    input: new JsonObject(),
+                    span: rule.SourceSpan,
+                    error: AbsenceEvidence.ExcludedTagPrefix + scopeExclusion,
+                    remediationText: null) with { ReasonCode = ReasonCodes.ScopeFactExcluded });
+                continue;
+            }
+
             var matches = _matcher.Match(rule.Selector, document);
 
             if (matches.Count == 0)
             {
+                var silent = ResolveSilence(rule, document, null);
                 verdicts.Add(BuildVerdict(
                     rule, ruleSet,
-                    outcome: NoMatchOutcome(rule),
+                    outcome: silent.Outcome,
                     section: null,
                     input: new JsonObject(),
                     span: rule.SourceSpan,
-                    error: null,
-                    remediationText: NoMatchRemediation(rule)));
+                    error: silent.Error,
+                    remediationText: silent.Remediation));
                 continue;
             }
 
@@ -261,7 +291,9 @@ public sealed class EvaluationService
                 if (_applicabilityFloor > 0.0
                     && rule.GateThreshold <= 0
                     && string.Equals(rule.Predicate, "true", StringComparison.Ordinal)
-                    && !PassesLexicalFloor(rule, section))
+                    && (!PassesLexicalFloor(rule, section)
+                        || IsDefinitionalSection(rule, section)
+                        || !MentionsRuleSubject(rule, section)))
                 {
                     floorFilteredSections++;
                     continue;
@@ -336,36 +368,38 @@ public sealed class EvaluationService
                 CollapseMatchAllMissingRequirements(rule, ruleSet, verdicts, ruleVerdictStart);
             }
 
+            if (_applicabilityFloor > 0.0
+                && rule.GateThreshold <= 0
+                && string.Equals(rule.Predicate, "true", StringComparison.Ordinal)
+                && rule.SemanticAnchors is not { Count: > 0 }
+                && (rule.RequiredConcepts is { Count: > 0 }
+                    || verdicts.Skip(ruleVerdictStart).Any(v => v.Outcome == VerdictOutcome.Pass)))
+            {
+                await ApplyStrictPlacementAsync(rule, ruleSet, matches, verdicts, ruleVerdictStart).ConfigureAwait(false);
+                emittedForRule = verdicts.Count - ruleVerdictStart;
+            }
+
             if (emittedForRule == 0)
             {
-                // Pillar 10 (#152) — if the lexical applicability floor was
-                // active AND filtered out at least one candidate section,
-                // the correct signal is NotApplicable (the doc is silent
-                // on this rule's topic), not Gap (which would claim the
-                // Mandatory rule was violated by omission). This flips the
-                // outcome only for the applicability-floor path so the
-                // classic "selector matched nothing" case still emits Gap
-                // for Mandatory rules exactly as before.
-                var scopeFiltered = floorFilteredSections + outOfScopeSections;
-                var noMatchOutcome = scopeFiltered > 0
-                    ? VerdictOutcome.NotApplicable
-                    : NoMatchOutcome(rule);
-                var noMatchRemediation = scopeFiltered > 0
-                    ? null
-                    : NoMatchRemediation(rule);
+                // Pillar 10 (#152) — a rule whose candidate sections were all
+                // filtered out by the applicability floor / scope has found no
+                // evidence. Silence alone is a Gap for Mandatory rules; it is
+                // only NotApplicable when the document explicitly excludes the
+                // subject or the rule is an out-of-document process.
                 var noMatchError = floorFilteredSections > 0
                     ? $"applicability_floor:no_relevant_section (filtered {floorFilteredSections} candidate section(s))"
                     : outOfScopeSections > 0
                         ? $"scope:not_established (no in-scope section among {outOfScopeSections} candidate section(s))"
                         : null;
+                var silent = ResolveSilence(rule, document, noMatchError);
                 verdicts.Add(BuildVerdict(
                     rule, ruleSet,
-                    outcome: noMatchOutcome,
+                    outcome: silent.Outcome,
                     section: null,
                     input: new JsonObject(),
                     span: rule.SourceSpan,
-                    error: noMatchError,
-                    remediationText: noMatchRemediation));
+                    error: silent.Error,
+                    remediationText: silent.Remediation));
             }
         }
 
@@ -422,6 +456,27 @@ public sealed class EvaluationService
         rule.Applicability == RuleApplicability.Mandatory
             ? VerdictOutcome.Gap
             : VerdictOutcome.NotApplicable;
+
+    /// <summary>
+    /// Outcome for a rule that found no evidence. NotApplicable only when the
+    /// rule is an out-of-document process or the document explicitly excludes
+    /// its subject (tagged so the appendix can cite it); otherwise the
+    /// applicability default (Mandatory → Gap).
+    /// </summary>
+    private static (VerdictOutcome Outcome, string? Error, string? Remediation) ResolveSilence(
+        Rule rule, ProjectedDocument document, string? diagnostic)
+    {
+        if (AbsenceEvidence.IsOutOfDocumentProcess(rule))
+            return (VerdictOutcome.NotApplicable, AbsenceEvidence.ProcessTag, null);
+        var exclusion = AbsenceEvidence.FindExclusion(rule, AbsenceEvidence.CollectText(document.Graph));
+        if (exclusion is not null)
+            return (VerdictOutcome.NotApplicable, AbsenceEvidence.ExcludedTagPrefix + exclusion, null);
+        // A floor-filtered rule is relevant but unevidenced: silence is a Gap
+        // whatever its applicability (NotApplicable needs explicit exclusion).
+        if (diagnostic is not null && diagnostic.StartsWith("applicability_floor:", StringComparison.Ordinal))
+            return (VerdictOutcome.Gap, diagnostic, $"Document does not address: {rule.NaturalLanguage}");
+        return (NoMatchOutcome(rule), diagnostic, NoMatchRemediation(rule));
+    }
 
     /// <summary>
     /// For a <c>Gap</c> verdict the suggested remediation is simply the
@@ -514,7 +569,7 @@ public sealed class EvaluationService
 
             // Pillar 9 — soft cohesion post-filter ported from
             // policy-compiler-spike v0.1.1. For rules with ≥2 anchors,
-            // demote a Pass verdict to NotApplicable when fewer than
+            // demote a Pass verdict to Gap when fewer than
             // _minEvidencedAnchors of the rule's anchors actually produced
             // bindings on this section. Rationale: a Pass is the claim
             // "the document addresses this requirement"; a Pass driven by
@@ -540,10 +595,12 @@ public sealed class EvaluationService
                 if (evidencedAnchors < _minEvidencedAnchors)
                 {
                     _logger.LogDebug(
-                        "Soft cohesion demoted Pass→NotApplicable for rule {RuleId} at {Path}: "
+                        "Soft cohesion demoted Pass→Gap for rule {RuleId} at {Path}: "
                         + "{Evidenced} of {Total} anchors evidenced (< {Min}).",
                         rule.Id, section.Path, evidencedAnchors, anchorCount, _minEvidencedAnchors);
-                    outcome = VerdictOutcome.NotApplicable;
+                    // Relevant but only partly evidenced is a Gap, never NotApplicable:
+                    // N/A requires explicit evidence that the trigger is absent.
+                    outcome = VerdictOutcome.Gap;
                 }
             }
 
@@ -674,6 +731,313 @@ public sealed class EvaluationService
             if (sectionTokens.Contains(token)) overlap++;
         var ratio = (double)overlap / topicTokens.Count;
         return ratio >= _applicabilityFloor;
+    }
+
+    private static string SectionText(MatchedSection section) =>
+        section.Node is JsonObject obj
+            && obj["text"] is JsonValue tv
+            && tv.TryGetValue<string>(out var t)
+                ? t
+                : string.Empty;
+
+    /// <summary>
+    /// A glossary / acronym section merely names terms; it cannot be evidence
+    /// that a control is implemented, so it never hosts a verdict unless the
+    /// rule itself is about definitions.
+    /// </summary>
+    private static bool IsDefinitionalSection(Rule rule, MatchedSection section)
+    {
+        if (section.Node is not JsonObject obj) return false;
+        var category = obj["category"] is JsonValue cv && cv.TryGetValue<string>(out var c) ? c : null;
+        if (!string.Equals(category, "definitions", StringComparison.OrdinalIgnoreCase)) return false;
+        var topic = rule.NaturalLanguage ?? string.Empty;
+        return !topic.Contains("definition", StringComparison.OrdinalIgnoreCase)
+            && !topic.Contains("glossary", StringComparison.OrdinalIgnoreCase)
+            && !topic.Contains("acronym", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly Regex NormativeWord = new(
+        @"\b(?:shall|must|should|required|requires|mandatory|prohibited|forbidden|may not|recommended)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    /// <summary>
+    /// A rule whose text contains no normative word is a statement of fact
+    /// ("The corporate-approved tools are …"), not a testable requirement, so
+    /// it cannot be Passed or reported as a Gap.
+    /// </summary>
+    private static bool IsNonNormative(Rule rule) =>
+        !NormativeWord.IsMatch(rule.NaturalLanguage ?? string.Empty)
+        && !NormativeWord.IsMatch(rule.EvidenceQuote ?? string.Empty);
+
+    private static readonly Regex ModalSplit = new(
+        @"\b(?:shall|must|should|may|will)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    /// <summary>
+    /// The rule's subject phrase is the text before its modal verb ("Database
+    /// authentication" in "Database authentication SHALL use …"). At least one
+    /// qualifier word of that phrase (all but the head noun) must appear in the
+    /// section, otherwise a keyword in the lambda alone (e.g. "managed
+    /// identity") would let an unrelated section satisfy the rule.
+    /// </summary>
+    private static bool MentionsRuleSubject(Rule rule, MatchedSection section)
+    {
+        var qualifiers = SubjectQualifiers(rule);
+        if (qualifiers.Count == 0) return true;
+        var sectionTokens = TokenizeForFloor(SectionText(section));
+        return qualifiers.Any(q => sectionTokens.Any(s => SharesStem(s, q)));
+    }
+
+    private static List<string> SubjectQualifiers(Rule rule)
+    {
+        var seed = !string.IsNullOrWhiteSpace(rule.EvidenceQuote) ? rule.EvidenceQuote : rule.NaturalLanguage ?? string.Empty;
+        var modal = ModalSplit.Match(seed);
+        if (!modal.Success) return [];
+        var words = Regex.Matches(seed[..modal.Index].ToLowerInvariant(), "[a-z0-9]+")
+            .Select(m => m.Value).ToList();
+        if (words.Count < 2) return [];
+        return words.Take(words.Count - 1)
+            .Where(w => w.Length >= 3 && !FloorStopwords.Contains(w) && !SubjectQuantifiers.Contains(w)).ToList();
+    }
+
+    // Rule words that narrow what a proving sentence must say, mapped to the
+    // sentence words that satisfy them. Deterministic, ordinal, no LLM.
+    private static readonly (string RuleWord, string[] SentenceWords)[] QualifierGroups =
+    [
+        ("only", ["only", "sole", "solely", "exclusively", "exclusive"]),
+        ("external", ["external", "outside", "public"]),
+    ];
+
+    private static List<(string RuleWord, string[] SentenceWords)> RequiredQualifiers(Rule rule)
+    {
+        var seed = !string.IsNullOrWhiteSpace(rule.EvidenceQuote) ? rule.EvidenceQuote : rule.NaturalLanguage ?? string.Empty;
+        var words = Regex.Matches(seed.ToLowerInvariant(), "[a-z0-9]+").Select(m => m.Value).ToHashSet(StringComparer.Ordinal);
+        return QualifierGroups.Where(g => words.Contains(g.RuleWord)).ToList();
+    }
+
+    private static readonly Regex UnitSeparator = new(
+        @"(?<=[.!?])\s+|[\r\n]+",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static IEnumerable<(int Start, int Length)> SplitUnits(string text)
+    {
+        var pos = 0;
+        foreach (Match sep in UnitSeparator.Matches(text))
+        {
+            foreach (var u in Trimmed(text, pos, sep.Index)) yield return u;
+            pos = sep.Index + sep.Length;
+        }
+        foreach (var u in Trimmed(text, pos, text.Length)) yield return u;
+
+        static IEnumerable<(int, int)> Trimmed(string t, int s, int e)
+        {
+            while (s < e && char.IsWhiteSpace(t[s])) s++;
+            while (e > s && char.IsWhiteSpace(t[e - 1])) e--;
+            if (e > s) yield return (s, e - s);
+        }
+    }
+
+    /// <summary>
+    /// Replaces a rule's section-level Passes with one Pass anchored on the
+    /// best proving sentence (others become supportingEvidence). When no
+    /// sentence proves the rule alone, the Passes become one Gap.
+    /// </summary>
+    private async Task ApplyStrictPlacementAsync(
+        Rule rule, RuleSet ruleSet, IReadOnlyList<MatchedSection> matches, List<Verdict> verdicts, int start)
+    {
+        var proofs = new List<(PassProof Proof, MatchedSection Section, Verdict? Original)>();
+        (PassProof Proof, MatchedSection Section, Verdict? Original, IReadOnlyList<string> Missing)? nearest = null;
+        Verdict? firstPass = null;
+        MatchedSection? firstSection = null;
+        var passIdx = new List<int>();
+        for (var i = start; i < verdicts.Count; i++)
+        {
+            var v = verdicts[i];
+            if (v.Outcome != VerdictOutcome.Pass) continue;
+            passIdx.Add(i);
+            var section = matches.FirstOrDefault(m =>
+                m.Node is JsonObject o && o["id"] is JsonValue idv
+                && idv.TryGetValue<string>(out var sid)
+                && string.Equals(sid, v.MatchedSectionId, StringComparison.Ordinal));
+            if (section is null) continue;
+            firstPass ??= v;
+            firstSection ??= section;
+            var result = await ProvePassAsync(rule, section).ConfigureAwait(false);
+            if (result.Proof is not null) proofs.Add((result.Proof, section, v));
+            else if (result.Near is not null && (nearest is null || result.Near.Score > nearest.Value.Proof.Score))
+                nearest = (result.Near, section, v, result.MissingQualifiers);
+        }
+
+        // Authored concepts can prove a rule in sections whose literal lambda failed.
+        if (rule.RequiredConcepts is { Count: > 0 })
+        {
+            foreach (var section in matches)
+            {
+                var sid = SectionId(section);
+                if (sid is null || verdicts.Skip(start).Any(x => x.Outcome == VerdictOutcome.Pass && string.Equals(x.MatchedSectionId, sid, StringComparison.Ordinal))) continue;
+                if (IsDefinitionalSection(rule, section)) continue;
+                var conceptResult = await ProvePassAsync(rule, section).ConfigureAwait(false);
+                if (conceptResult.Proof is not null) proofs.Add((conceptResult.Proof, section, null));
+            }
+        }
+
+        for (var k = passIdx.Count - 1; k >= 0; k--) verdicts.RemoveAt(passIdx[k]);
+
+        if (proofs.Count == 0)
+        {
+            // The lambda was satisfied somewhere, so some mandatory clauses are
+            // evidenced: Partial, never Pass. Either a qualifier is missing from
+            // the closest sentence, or the terms are only met across sentences.
+            var near = nearest;
+            var partial = BuildVerdict(
+                rule, ruleSet,
+                outcome: VerdictOutcome.Partial,
+                section: near?.Section ?? firstSection,
+                input: near is not null ? SnapshotInput(near.Value.Section) : firstSection is not null ? SnapshotInput(firstSection) : new JsonObject(),
+                span: near?.Proof.Span ?? firstPass?.SourceSpan ?? rule.SourceSpan,
+                error: null,
+                remediationText: $"Document partly addresses: {rule.NaturalLanguage}");
+            verdicts.Add(partial with
+            {
+                FindingKind = FindingKinds.PartialEvidence,
+                AnchorKind = near is not null ? AnchorKinds.EvidenceSentence : partial.AnchorKind,
+                ScopeBasis = (near?.Original ?? firstPass)?.ScopeBasis,
+                DocumentEvidence = near?.Proof.Quote,
+                ReasonCode = near is not null ? ReasonCodes.MissingRequiredQualifier : ReasonCodes.EvidenceNotCohesive,
+                SatisfiedConditions = near is not null ? ["required_terms"] : ["required_terms_across_sentences"],
+                MissingConditions = near is not null
+                    ? near.Value.Missing.Select(m => "qualifier:" + m).ToList()
+                    : ["single_sentence_proof"],
+            });
+            return;
+        }
+        var ordered = proofs
+            .OrderByDescending(p => p.Proof.Score)
+            .ThenBy(p => p.Proof.Span.CharStart)
+            .ToList();
+        var best = ordered[0];
+        var support = ordered.Skip(1)
+            .Select(p => new SupportingEvidence(p.Original?.MatchedSectionId ?? SectionId(p.Section), p.Proof.Span.HeadingPath, p.Proof.Span, p.Proof.Quote))
+            .ToList();
+        verdicts.Add(BuildVerdict(
+            rule, ruleSet,
+            outcome: VerdictOutcome.Pass,
+            section: best.Section,
+            input: SnapshotInput(best.Section),
+            span: best.Proof.Span,
+            error: null,
+            remediationText: null) with
+        {
+            AnchorKind = AnchorKinds.EvidenceSentence,
+            ScopeBasis = best.Original?.ScopeBasis,
+            DocumentEvidence = best.Proof.Quote,
+            SupportingEvidence = support.Count > 0 ? support : null,
+        });
+    }
+
+    private static string? SectionId(MatchedSection s) =>
+        s.Node is JsonObject o && o["id"] is JsonValue v && v.TryGetValue<string>(out var id) ? id : null;
+
+    private static bool ConceptsSatisfied(Rule rule, string unit) =>
+        rule.RequiredConcepts is { Count: > 0 } groups
+        && groups.All(g => g.Any(alt => !string.IsNullOrWhiteSpace(alt) && unit.Contains(alt.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    private sealed record PassProof(SourceSpan Span, string Quote, int Score);
+
+    /// <summary>
+    /// Outcome of sentence-level proof for one section: the full proof when a
+    /// single sentence satisfies the lambda and every qualifier, otherwise the
+    /// closest sentence that satisfied the lambda and the qualifiers it lacked.
+    /// </summary>
+    private sealed record ProofResult(PassProof? Proof, PassProof? Near, IReadOnlyList<string> MissingQualifiers);
+
+    /// <summary>
+    /// A Pass must be proven by ONE sentence of the section that, on its own,
+    /// satisfies the rule's lambda, names the rule's subject and contains every
+    /// narrowing qualifier ("only", "external"). Sentences that satisfy the
+    /// lambda but lack a qualifier are returned as <see cref="ProofResult.Near"/>
+    /// so the caller can report Partial.
+    /// </summary>
+    private async Task<ProofResult> ProvePassAsync(Rule rule, MatchedSection section)
+    {
+        var none = new ProofResult(null, null, []);
+        if (section.Node is not JsonObject obj) return none;
+        var text = obj["text"] is JsonValue tv && tv.TryGetValue<string>(out var ts) ? ts : string.Empty;
+        if (text.Length == 0) return none;
+        long bodyStart = section.Span.CharStart;
+        if (obj["text_char_start"] is JsonValue bv)
+        {
+            if (bv.TryGetValue<long>(out var lv)) bodyStart = lv;
+            else if (bv.TryGetValue<int>(out var iv)) bodyStart = iv;
+        }
+
+        var qualifiers = RequiredQualifiers(rule);
+        var subject = SubjectQualifiers(rule);
+        var engine = new RE.RulesEngine([WorkflowFactory.ForRule(rule)], WorkflowFactory.CreateReSettings());
+        using var _ = VectorStoreAccessor.Push(_vectorStore);
+
+        PassProof? best = null, near = null;
+        var missing = new List<string>();
+        foreach (var (start, length) in SplitUnits(text))
+        {
+            var unit = text.Substring(start, length);
+            var tokens = TokenizeForFloor(unit);
+            var words = Regex.Matches(unit.ToLowerInvariant(), "[a-z0-9]+").Select(m => m.Value).ToHashSet(StringComparer.Ordinal);
+
+            var clone = (JsonObject)obj.DeepClone();
+            clone["text"] = unit;
+            var results = await engine
+                .ExecuteAllRulesAsync(WorkflowFactory.WorkflowName, JsonToExpando.Convert(clone)!)
+                .ConfigureAwait(false);
+            var result = results.Single();
+            var lambdaOk = result.IsSuccess && !IsRuntimeException(result.ExceptionMessage);
+            if (!lambdaOk && !ConceptsSatisfied(rule, unit)) continue;
+
+            var lacking = qualifiers.Where(g => !g.SentenceWords.Any(words.Contains)).Select(g => g.RuleWord).ToList();
+            var score = subject.Count(q => tokens.Any(s => SharesStem(s, q)));
+
+            // Evidence is shown as the whole bullet/paragraph holding the
+            // proving sentence, so adjacent sentences of one statement stay together.
+            var span = new SourceSpan(
+                section.Span.DocumentId,
+                CharStart: (int)(bodyStart + start),
+                CharLength: length,
+                PageNumber: section.Span.PageNumber,
+                HeadingPath: section.Span.HeadingPath);
+            var quote = unit;
+            var ls = text.LastIndexOf('\n', Math.Max(0, start - 1));
+            var ls0 = ls < 0 ? 0 : ls + 1;
+            var le = text.IndexOf('\n', start + length);
+            var le0 = le < 0 ? text.Length : le;
+            var line = text[ls0..le0].Trim();
+            if (line.Length is > 0 and <= 500 && ls0 <= start)
+            {
+                var lead = text[ls0..le0].Length - text[ls0..le0].TrimStart().Length;
+                span = span with { CharStart = (int)(bodyStart + ls0 + lead), CharLength = line.Length };
+                quote = line;
+            }
+            var proof = new PassProof(span, quote, score);
+
+            if (lacking.Count == 0)
+            {
+                if (best is null || score > best.Score) best = proof;
+            }
+            else
+            {
+                if (near is null || score > near.Score) { near = proof; missing = lacking; }
+            }
+        }
+        return new ProofResult(best, near, missing);
+    }
+    private static readonly HashSet<string> SubjectQuantifiers = new(StringComparer.Ordinal)
+    {
+        "every", "each", "all", "any", "some", "also", "both", "other", "same",
+    };
+
+    private static bool SharesStem(string a, string b)
+    {
+        var n = Math.Min(Math.Min(a.Length, b.Length), 5);
+        return string.CompareOrdinal(a, 0, b, 0, n) == 0;
     }
 
     private static HashSet<string> ExtractTopicTokens(Rule rule)
@@ -1146,11 +1510,13 @@ public sealed class EvaluationService
         var gap = verdicts.Count(v => v.Outcome == VerdictOutcome.Gap);
         var err = verdicts.Count(v => v.Outcome == VerdictOutcome.Error);
         var skipped = verdicts.Count(v => v.Outcome == VerdictOutcome.Skipped);
+        var partial = verdicts.Count(v => v.Outcome == VerdictOutcome.Partial);
         // Gaps count against the score: a Mandatory rule the document
         // never addressed is just as much a finding as an explicit fail.
         // Skipped verdicts (Pillar 1 doc-kind mismatch) never count — the
-        // rule simply did not apply to this artifact kind.
-        var denominator = pass + fail + gap;
+        // rule simply did not apply to this artifact kind. Partial earns no
+        // credit, so it stays in the denominator.
+        var denominator = pass + fail + gap + partial;
         var score = denominator == 0 ? 1.0 : (double)pass / denominator;
 
         // Pillar 1 (#116) — when every rule that ran got skipped via the
@@ -1170,6 +1536,7 @@ public sealed class EvaluationService
         IReadOnlyList<RuleSummary>? summaries = null;
         int? totalUnique = null, rp = null, rf = null, rna = null, rg = null, re_ = null, rs = null;
         double? ruleScore = null;
+        var rpart = 0;
         if (_emitRuleLevelStats)
         {
             summaries = BuildRuleSummaries(verdicts);
@@ -1180,7 +1547,8 @@ public sealed class EvaluationService
             rg = summaries.Count(s => s.AggregateOutcome == VerdictOutcome.Gap);
             re_ = summaries.Count(s => s.AggregateOutcome == VerdictOutcome.Error);
             rs = summaries.Count(s => s.AggregateOutcome == VerdictOutcome.Skipped);
-            var ruleDenom = rp.Value + rf.Value + rg.Value;
+            rpart = summaries.Count(s => s.AggregateOutcome == VerdictOutcome.Partial);
+            var ruleDenom = rp.Value + rf.Value + rg.Value + rpart;
             ruleScore = ruleDenom == 0 ? 1.0 : (double)rp.Value / ruleDenom;
         }
 
@@ -1209,6 +1577,7 @@ public sealed class EvaluationService
             // when the doc-kind gate did not fire, so legacy reports stay
             // byte-identical. The fields appear only when actually relevant.
             Skipped = skipped > 0 ? skipped : null,
+            Partials = partial > 0 ? partial : null,
             WrongProfile = wrongProfile ? true : null,
             // Pillar 10 (#152) — rule-level fields default to null so any
             // caller that doesn't opt into rule-level stats keeps identical
@@ -1254,9 +1623,11 @@ public sealed class EvaluationService
             var gap = list.Count(v => v.Outcome == VerdictOutcome.Gap);
             var err = list.Count(v => v.Outcome == VerdictOutcome.Error);
             var sk = list.Count(v => v.Outcome == VerdictOutcome.Skipped);
+            var part = list.Count(v => v.Outcome == VerdictOutcome.Partial);
             VerdictOutcome agg = pass > 0 ? VerdictOutcome.Pass
                 : fail > 0 ? VerdictOutcome.Fail
                 : err > 0 ? VerdictOutcome.Error
+                : part > 0 ? VerdictOutcome.Partial
                 : gap > 0 ? VerdictOutcome.Gap
                 : na > 0 ? VerdictOutcome.NotApplicable
                 : VerdictOutcome.Skipped;
@@ -1277,6 +1648,7 @@ public sealed class EvaluationService
                 SectionsEvaluated: sectionsEvaluated)
             {
                 RepresentativeVerdictId = rep.Id,
+                PartialCount = part > 0 ? part : null,
             });
         }
         return result;
@@ -1323,16 +1695,15 @@ public sealed class EvaluationService
         var scope = ResolveFactScope(rule, sidecar);
         if (scope.Count == 0)
         {
-            // Fact-mode "no scoped sections" is an advisory-NA, not a Gap:
-            // no section in the doc even discusses any of the rule's
-            // RequiredFacts, so the concept is out-of-scope for this doc
-            // rather than a silent-missing required item. Softer + more
-            // honest signal than Gap. Diagnostic tag preserved in
-            // ErrorMessage for auditability.
-            return BuildVerdict(rule, ruleSet, VerdictOutcome.NotApplicable,
+            // No section discusses the rule's RequiredFacts. Absent evidence
+            // is not proof the topic is irrelevant, so a Mandatory rule is a
+            // Gap (NA only for Conditional / Optional). Diagnostic tag
+            // preserved in ErrorMessage for auditability.
+            var silent = ResolveSilence(rule, document, "fact_mode:no_scoped_sections");
+            return BuildVerdict(rule, ruleSet, silent.Outcome,
                 section: null, input: new JsonObject(), span: rule.SourceSpan,
-                error: "fact_mode:no_scoped_sections",
-                remediationText: null);
+                error: silent.Error,
+                remediationText: silent.Remediation);
         }
 
         var bag = new LambdaRag.Core.Facts.FactBag();
@@ -1344,9 +1715,9 @@ public sealed class EvaluationService
 
         // Contract null-handling: when any RequiredFact is null in the union
         // bag, the document is silent on the concept and the rule cannot
-        // adjudicate. Emit NotApplicable — the doc simply doesn't discuss
-        // this concept, which is out-of-scope, not a silent-missing
-        // required item. Softer + more honest than Gap. This runs BEFORE
+        // adjudicate. Mandatory rules emit Gap (missing evidence is not proof
+        // of non-applicability); Conditional / Optional emit NotApplicable.
+        // This runs BEFORE
         // lambda evaluation so a genuinely absent concept can never
         // silently pass through a permissive `== null` comparison. The
         // list of missing concepts is preserved in EvaluatedInput +
@@ -1356,12 +1727,13 @@ public sealed class EvaluationService
             var missing = rule.RequiredFacts.Where(rf => bag.Get(rf) is null).ToList();
             if (missing.Count > 0)
             {
-                return BuildVerdict(rule, ruleSet, VerdictOutcome.NotApplicable,
+                var silent = ResolveSilence(rule, document, "fact_mode:missing_required_facts:" + string.Join(",", missing));
+                return BuildVerdict(rule, ruleSet, silent.Outcome,
                     section: null,
                     input: new JsonObject { ["_missing_facts"] = new JsonArray(missing.Select(m => (JsonNode?)JsonValue.Create(m)).ToArray()) },
                     span: rule.SourceSpan,
-                    error: "fact_mode:missing_required_facts:" + string.Join(",", missing),
-                    remediationText: null);
+                    error: silent.Error,
+                    remediationText: silent.Remediation);
             }
         }
 
@@ -1379,12 +1751,13 @@ public sealed class EvaluationService
             var allNull = rule.RequiredFactsAny.All(rf => bag.Get(rf) is null);
             if (allNull)
             {
-                return BuildVerdict(rule, ruleSet, VerdictOutcome.NotApplicable,
+                var silent = ResolveSilence(rule, document, "fact_mode:missing_required_facts_any:" + string.Join(",", rule.RequiredFactsAny));
+                return BuildVerdict(rule, ruleSet, silent.Outcome,
                     section: null,
                     input: new JsonObject { ["_missing_facts_any"] = new JsonArray(rule.RequiredFactsAny.Select(m => (JsonNode?)JsonValue.Create(m)).ToArray()) },
                     span: rule.SourceSpan,
-                    error: "fact_mode:missing_required_facts_any:" + string.Join(",", rule.RequiredFactsAny),
-                    remediationText: null);
+                    error: silent.Error,
+                    remediationText: silent.Remediation);
             }
         }
 

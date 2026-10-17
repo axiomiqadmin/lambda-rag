@@ -327,6 +327,27 @@ public static class CommentFormatting
     public static string BuildPassBody(Rule? rule, Verdict verdict, string fallbackStatement)
     {
         var sb = new System.Text.StringBuilder();
+        if (rule is not null && !string.IsNullOrWhiteSpace(verdict.DocumentEvidence))
+        {
+            var section = verdict.SourceSpan.HeadingPath is { Length: > 0 } hp
+                ? hp.Split('/', StringSplitOptions.RemoveEmptyEntries)[^1].Trim()
+                : "document";
+            sb.Append("Pass \u2014 ").Append(rule.Id);
+            if (!string.IsNullOrWhiteSpace(rule.NaturalLanguage))
+                sb.Append("\nRequirement: ").Append(rule.NaturalLanguage);
+            sb.Append("\nPrimary evidence \u2014 Section ").Append(section).Append(": \u201C")
+              .Append(verdict.DocumentEvidence).Append('\u201D');
+            sb.Append("\nAssessment: the quoted text satisfies the rule's required terms.");
+            if (verdict.SupportingEvidence is { Count: > 0 } sup)
+            {
+                sb.Append("\nAdditional evidence \u2014 ");
+                sb.Append(string.Join("; ", sup.Select(s =>
+                    s.HeadingPath is { Length: > 0 } p
+                        ? p.Split('/', StringSplitOptions.RemoveEmptyEntries)[^1].Trim()
+                        : "other section")));
+            }
+            return sb.ToString();
+        }
         sb.Append("\u2713 Passed");
 
         if (rule is not null)
@@ -346,6 +367,12 @@ public static class CommentFormatting
                 sb.Append(' ').Append('v').Append(rule.Version);
             }
             sb.Append(']');
+            if (!string.IsNullOrWhiteSpace(verdict.DocumentEvidence))
+            {
+                sb.Append("\nEvidence: \u201C").Append(verdict.DocumentEvidence).Append('\u201D');
+                if (verdict.SupportingEvidence is { Count: > 0 } sup)
+                    sb.Append("\nAlso supported in ").Append(sup.Count).Append(" other section(s).");
+            }
         }
         else
         {

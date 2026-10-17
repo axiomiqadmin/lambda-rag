@@ -40,15 +40,18 @@ public class ApplicabilityFloorTests
             emitRuleLevelStats: emitRuleLevelStats);
     }
 
-    private static ProjectedDocument Doc(params (string id, string text)[] sections)
+    private static ProjectedDocument Doc(params (string id, string text)[] sections) =>
+        DocWithCategory(sections.Select(s => (s.id, "body", s.text)).ToArray());
+
+    private static ProjectedDocument DocWithCategory(params (string id, string category, string text)[] sections)
     {
         var arr = new JsonArray();
-        foreach (var (id, text) in sections)
+        foreach (var (id, category, text) in sections)
         {
             arr.Add(new JsonObject
             {
                 ["id"] = id,
-                ["category"] = "body",
+                ["category"] = category,
                 ["text"] = text,
                 ["heading"] = id,
             });
@@ -120,14 +123,11 @@ public class ApplicabilityFloorTests
     // ── Applicability floor: silent-topic rule ──────────────────────────
 
     [Fact]
-    public async Task Floor_on_silent_topic_becomes_NotApplicable_not_Gap()
+    public async Task Floor_on_silent_topic_becomes_Gap_not_NotApplicable()
     {
         // Rule about AKS pods. Doc has three sections, none mentioning
-        // Kubernetes / pods / AKS. Pre-floor: 3 hard Fails (or a Gap-of-1
-        // if selector matched nothing). With floor on: no section clears
-        // the topic-overlap ratio → single NotApplicable verdict, NOT a
-        // Gap (a Mandatory silent Gap would penalise the score for a
-        // topic the doc was never scoped to cover).
+        // Kubernetes / pods / AKS. Silence is not proof the rule is
+        // irrelevant, so a Mandatory rule is a Gap.
         var rule = MakeBroadRule(
             "EA-AKS-001",
             evidenceQuote: "Pods SHALL authenticate to cloud APIs using workload identity federation.",
@@ -142,11 +142,212 @@ public class ApplicabilityFloorTests
 
         report.Verdicts.Should().ContainSingle();
         var only = report.Verdicts[0];
-        only.Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        only.Outcome.Should().Be(VerdictOutcome.Gap);
         only.ErrorMessage.Should().StartWith("applicability_floor:no_relevant_section");
-        report.RulesNotApplicable.Should().Be(1);
-        report.RulesGap.Should().Be(0);
-        report.RuleScore.Should().Be(1.0, "silent rule was filtered out of the denominator");
+        report.RulesGap.Should().Be(1);
+        report.RulesNotApplicable.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Floor_on_topic_explicitly_excluded_by_document_is_NotApplicable()
+    {
+        var rule = MakeBroadRule(
+            "EA-AKS-001",
+            evidenceQuote: "Pods SHALL authenticate to cloud APIs using workload identity federation.",
+            lambda: "input1.text.Contains(\"workload identity federation\")");
+        var doc = Doc(
+            ("s1", "The signing budget for contracts is fifteen days."),
+            ("s2", "Kubernetes pods are not deployed, so identity federation is out of scope."));
+
+        var report = await Build(applicabilityFloor: 0.5, emitRuleLevelStats: true)
+            .EvaluateAsync(Set(rule), doc);
+
+        var only = report.Verdicts.Should().ContainSingle().Subject;
+        only.Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        only.ErrorMessage.Should().StartWith("excluded:");
+    }
+
+    [Fact]
+    public async Task Glossary_and_unrelated_sections_never_host_a_pass()
+    {
+        var rule = MakeBroadRule(
+            "EA-DBAUTH",
+            evidenceQuote: "Database authentication SHALL use workload identity / managed identity where supported",
+            lambda: "input1.text.ToLower().Contains(\"workload identity\") || input1.text.ToLower().Contains(\"managed identity\")");
+        var doc = DocWithCategory(
+            ("s-glossary", "definitions", "MI: Managed Identity - workload identity requiring no stored credentials. Database: a data store."),
+            ("s-svc", "body", "Service-to-service calls use Managed Identity tokens; no shared secrets."),
+            ("s-db", "body", "Each service's Managed Identity is granted Cosmos DB access to its own database."));
+
+        var report = await Build(applicabilityFloor: 0.2, emitRuleLevelStats: true)
+            .EvaluateAsync(Set(rule), doc);
+
+        var pass = report.Verdicts.Should().ContainSingle(v => v.Outcome == VerdictOutcome.Pass).Subject;
+        pass.EvaluatedInput!["id"]!.GetValue<string>().Should().Be("s-db");
+    }
+
+    // ── Strict placement: sentence-level proof ──────────────────────────
+
+    [Fact]
+    public async Task Pass_is_anchored_on_the_single_proving_sentence()
+    {
+        var rule = MakeBroadRule(
+            "EA-DBAUTH",
+            evidenceQuote: "Database authentication SHALL use managed identity",
+            lambda: "input1.text.ToLower().Contains(\"managed identity\")");
+        var text = "The database tier is hosted in one region.\nDatabase access uses managed identity for every service. Backups run nightly.\nRestores are tested.";
+        var doc = Doc(("s-db", text));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        var pass = report.Verdicts.Should().ContainSingle(v => v.Outcome == VerdictOutcome.Pass).Subject;
+        pass.AnchorKind.Should().Be(AnchorKinds.EvidenceSentence);
+        pass.DocumentEvidence.Should().Be("Database access uses managed identity for every service. Backups run nightly.");
+        pass.SourceSpan.CharLength.Should().Be(pass.DocumentEvidence!.Length);
+    }
+
+    [Fact]
+    public async Task Pass_requires_the_only_qualifier_in_the_same_sentence()
+    {
+        var rule = MakeBroadRule(
+            "EA-TLS",
+            evidenceQuote: "External traffic SHALL use only TLS 1.2 or higher",
+            lambda: "input1.text.ToLower().Contains(\"tls 1.2\")");
+        var doc = Doc(("s-net", "External traffic is protected. Internal calls use TLS 1.2 or higher."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.Pass);
+        report.Verdicts.Should().Contain(v => v.Outcome == VerdictOutcome.Partial
+            && v.ReasonCode == ReasonCodes.MissingRequiredQualifier);
+    }
+
+    [Fact]
+    public async Task Authored_concepts_prove_a_pass_the_literal_lambda_misses()
+    {
+        var rule = MakeBroadRule(
+            "EA-SEMVER",
+            evidenceQuote: "Breaking changes SHALL increment the major version",
+            lambda: "input1.text.ToLower().Contains(\"increment the major version\")") with
+        {
+            RequiredConcepts = [["breaking change"], ["new major version", "next major version"]],
+        };
+        var doc = Doc(("s-v", "Breaking changes require a new major version."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().ContainSingle(v => v.Outcome == VerdictOutcome.Pass)
+            .Which.DocumentEvidence.Should().Contain("new major version");
+    }
+
+    [Fact]
+    public async Task Missing_concept_group_does_not_pass()
+    {
+        var rule = MakeBroadRule(
+            "EA-SEMVER2",
+            evidenceQuote: "Breaking changes SHALL increment the major version",
+            lambda: "input1.text.ToLower().Contains(\"increment the major version\")") with
+        {
+            RequiredConcepts = [["breaking change"], ["new major version"]],
+        };
+        var doc = Doc(("s-v", "Breaking changes are announced in release notes."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.Pass);
+    }
+
+    [Fact]
+    public async Task Scope_fact_established_by_document_evidence_makes_other_platform_rule_not_applicable()
+    {
+        var rule = MakeBroadRule(
+            "EA-OTHER",
+            evidenceQuote: "Cluster nodes SHALL be patched weekly",
+            lambda: "input1.text.ToLower().Contains(\"patched weekly\")") with
+        {
+            AppliesWhen = new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["cluster"] },
+        };
+        var set = Set(rule) with
+        {
+            ScopeFacts = [new ScopeFact("platform", ["serverless"], ["runs exclusively on serverless"])],
+        };
+        var doc = Doc(("s-p", "The system runs exclusively on serverless functions."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(set, doc);
+
+        var v = report.Verdicts.Should().ContainSingle().Subject;
+        v.Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        v.ReasonCode.Should().Be(ReasonCodes.ScopeFactExcluded);
+        v.ErrorMessage.Should().Contain("runs exclusively on serverless");
+    }
+
+    [Fact]
+    public async Task Scope_fact_without_document_evidence_does_not_exclude_rule()
+    {
+        var rule = MakeBroadRule(
+            "EA-OTHER2",
+            evidenceQuote: "Cluster nodes SHALL be patched weekly",
+            lambda: "input1.text.ToLower().Contains(\"patched weekly\")") with
+        {
+            AppliesWhen = new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["cluster"] },
+        };
+        var set = Set(rule) with
+        {
+            ScopeFacts = [new ScopeFact("platform", ["serverless"], ["runs exclusively on serverless"])],
+        };
+        var doc = Doc(("s-p", "The system is described below."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(set, doc);
+
+        report.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.NotApplicable);
+    }
+
+    [Fact]
+    public async Task Rule_passing_in_many_sections_gets_one_primary_pass_with_supporting_evidence()
+    {
+        var rule = MakeBroadRule(
+            "EA-DBAUTH",
+            evidenceQuote: "Database authentication SHALL use managed identity",
+            lambda: "input1.text.ToLower().Contains(\"managed identity\")");
+        var doc = Doc(
+            ("s-a", "Database access uses managed identity."),
+            ("s-b", "Database clients authenticate with managed identity as well."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        var pass = report.Verdicts.Should().ContainSingle(v => v.Outcome == VerdictOutcome.Pass).Subject;
+        pass.SupportingEvidence.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Rule_without_normative_word_is_skipped_not_passed()
+    {
+        var rule = MakeBroadRule(
+            "EA-FACT",
+            evidenceQuote: "The corporate-approved tools are Terraform and Bicep.",
+            lambda: "input1.text.ToLower().Contains(\"terraform\")");
+        var doc = Doc(("s-iac", "Infrastructure provisioning via IaC (Terraform)."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().ContainSingle().Which.Outcome.Should().Be(VerdictOutcome.Skipped);
+    }
+
+    [Fact]
+    public async Task Optional_rule_with_no_relevant_section_is_Gap_not_NotApplicable()
+    {
+        var rule = MakeBroadRule(
+            "EA-OPT",
+            evidenceQuote: "Latency histograms SHOULD expose exemplars",
+            lambda: "input1.text.ToLower().Contains(\"exemplar\")") with
+        {
+            Applicability = RuleApplicability.Optional,
+        };
+        var doc = Doc(("s-x", "Totally unrelated payroll content."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().ContainSingle().Which.Outcome.Should().Be(VerdictOutcome.Gap);
     }
 
     // ── Applicability floor: keeps topic-matched sections ───────────────

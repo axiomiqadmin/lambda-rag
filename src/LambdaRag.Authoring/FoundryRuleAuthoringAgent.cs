@@ -132,6 +132,8 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
           "relevantExamples": ["<1-3 short (<= 400 chars) invented section excerpts that ARE in scope; each must contain at least one scopeTerm>"],
           "irrelevantExamples": ["<1-3 short (<= 400 chars) invented section excerpts that are NOT in scope (e.g. unrelated topics); none may contain any scopeTerm>"],
           "requiredEvidence": ["<what an in-scope section must state to comply>"],
+          "requiredConcepts": [["<alternative wording A of mandatory part 1>", "<alternative wording B of mandatory part 1>"], ["<alternatives for mandatory part 2>"]],
+          "appliesWhen": [{ "fact": "<fact name, e.g. platform>", "values": ["<value/alias>", "<another alias of the accepted value>"] }],
           "severity": "<Suggestion | Deviation | Violation | Critical | Unsupported>",
           "severityBasis": "<the concrete impact (security, legal, financial, availability) that justifies the severity>"
         }
@@ -163,6 +165,22 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
 
         Emit ONE rule per distinct normative clause — do not collapse multiple
         clauses into one rule.
+
+        requiredConcepts (semantic alternatives, authored from the CLAUSE only):
+        one inner list per mandatory part of the clause (subject, action, and every
+        qualifier such as every/all/only/external/production/at least/cadence). Each
+        inner list holds 2-8 lowercase alternative wordings a compliant document might
+        use for that part. A sentence proves the rule only if it contains one
+        alternative from EVERY list, so include a list for each qualifier. At least
+        one alternative per list MUST appear (case-insensitively) in sourceQuote.
+        Example for "Breaking changes SHALL increment the major version":
+          [["breaking change"], ["major version", "new major version", "next major version"]]
+
+        appliesWhen (optional, only when the clause is specific to a technology,
+        platform or operating condition, e.g. a clause about one hosting product):
+        a list of {fact, values}: a lowercase fact name (e.g. "platform") and the
+        aliases of the single accepted value. Omit it for general clauses. Never
+        invent conditions the clause does not state.
 
         If the input contains no normative clauses, return {"rules": []}.
         """;
@@ -428,6 +446,8 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                   "scopeTerms":      { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3 } },
                   "scopeDescription": { "type": "string" },
                   "requiredEvidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+                  "requiredConcepts": { "type": "array", "maxItems": 6, "items": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3, "maxLength": 60 } } },
+                  "appliesWhen": { "type": "array", "maxItems": 3, "items": { "type": "object", "additionalProperties": false, "required": ["fact", "values"], "properties": { "fact": { "type": "string", "minLength": 2, "maxLength": 40 }, "values": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 2, "maxLength": 60 } } } } },
                   "relevantExamples":   { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
                   "irrelevantExamples": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
                   "severity":        { "type": "string", "enum": ["Suggestion", "Deviation", "Violation", "Critical", "Unsupported"] },
@@ -479,6 +499,8 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                 ScopeTerms = ReadStrings(o["scopeTerms"]),
                 ScopeDescription = (string?)o["scopeDescription"] ?? string.Empty,
                 RequiredEvidence = ReadStrings(o["requiredEvidence"]),
+                RequiredConcepts = ReadConcepts(o["requiredConcepts"]),
+                AppliesWhen = ReadAppliesWhen(o["appliesWhen"]),
                 RelevantExamples = ReadStrings(o["relevantExamples"]),
                 IrrelevantExamples = ReadStrings(o["irrelevantExamples"]),
                 Severity = (string?)o["severity"] ?? string.Empty,
@@ -486,6 +508,52 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             });
         }
         return list;
+    }
+
+    private static List<List<string>> ReadConcepts(JsonNode? node)
+    {
+        var groups = new List<List<string>>();
+        if (node is JsonArray arr)
+            foreach (var g in arr)
+                if (g is JsonArray ga)
+                {
+                    var alts = ReadStrings(ga).Select(s => s.Trim().ToLowerInvariant()).Where(s => s.Length > 0)
+                        .Distinct(StringComparer.Ordinal).ToList();
+                    if (alts.Count > 0) groups.Add(alts);
+                }
+        return groups;
+    }
+
+    private static Dictionary<string, List<string>> ReadAppliesWhen(JsonNode? node)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        if (node is JsonArray arr)
+            foreach (var item in arr)
+            {
+                if (item is not JsonObject o) continue;
+                var key = ((string?)o["fact"] ?? string.Empty).Trim().ToLowerInvariant();
+                var values = ReadStrings(o["values"]).Select(s => s.Trim().ToLowerInvariant()).Where(s => s.Length > 0)
+                    .Distinct(StringComparer.Ordinal).ToList();
+                if (key.Length > 0 && values.Count > 0) result[key] = values;
+            }
+        return result;
+    }
+
+    /// <summary>
+    /// Deterministic self-consistency: every authored concept group must be
+    /// satisfied by the clause's own verbatim quote (the policy proves itself),
+    /// and alternatives must be plain phrases. Null when valid.
+    /// </summary>
+    internal static string? ValidateConcepts(IReadOnlyList<List<string>> groups, string sourceQuote)
+    {
+        foreach (var g in groups)
+        {
+            if (g.Any(a => a.Length < 3 || a.IndexOfAny(new[] { '"', '\\', '\r', '\n' }) >= 0))
+                return "concept alternative is too short or contains illegal characters";
+            if (!g.Any(a => sourceQuote.Contains(a, StringComparison.OrdinalIgnoreCase)))
+                return $"concept group [{string.Join(" | ", g)}] has no alternative present in sourceQuote";
+        }
+        return null;
     }
 
     private static List<string> ReadStrings(JsonNode? node)
@@ -523,6 +591,8 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         var scopeDefect = ValidateScopeTerms(NormalizeScopeTerms(dto.ScopeTerms));
         if (scopeDefect is not null) { reason = $"no defensible scope: {scopeDefect}"; return false; }
         if (dto.RequiredEvidence.All(string.IsNullOrWhiteSpace)) { reason = "missing requiredEvidence"; return false; }
+        var conceptDefect = ValidateConcepts(dto.RequiredConcepts, dto.SourceQuote);
+        if (conceptDefect is not null) { reason = $"requiredConcepts rejected: {conceptDefect}"; return false; }
         var exampleDefect = ValidateScopeExamples(
             NormalizeScopeTerms(dto.ScopeTerms), dto.RelevantExamples, dto.IrrelevantExamples);
         if (exampleDefect is not null) { reason = $"scope example validation failed: {exampleDefect}"; return false; }
@@ -624,6 +694,12 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             Scope = new RuleScope(scopeTerms, string.IsNullOrWhiteSpace(dto.ScopeDescription) ? null : dto.ScopeDescription.Trim()),
             RequiredEvidence = dto.RequiredEvidence.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList(),
             SeverityBasis = severityBasis,
+            RequiredConcepts = dto.RequiredConcepts.Count > 0
+                ? dto.RequiredConcepts.Select(g => (IReadOnlyList<string>)g.ToList()).ToList()
+                : null,
+            AppliesWhen = dto.AppliesWhen.Count > 0
+                ? dto.AppliesWhen.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<string>)kv.Value.ToList(), StringComparer.Ordinal)
+                : null,
             Examples = new RuleExamples(
                 dto.RelevantExamples.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList(),
                 dto.IrrelevantExamples.Where(e => !string.IsNullOrWhiteSpace(e)).Select(e => e.Trim()).ToList()),
@@ -761,6 +837,8 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         public List<string> ScopeTerms { get; set; } = new();
         public string ScopeDescription { get; set; } = string.Empty;
         public List<string> RequiredEvidence { get; set; } = new();
+        public List<List<string>> RequiredConcepts { get; set; } = new();
+        public Dictionary<string, List<string>> AppliesWhen { get; set; } = new();
         public List<string> RelevantExamples { get; set; } = new();
         public List<string> IrrelevantExamples { get; set; } = new();
         public string Severity { get; set; } = string.Empty;

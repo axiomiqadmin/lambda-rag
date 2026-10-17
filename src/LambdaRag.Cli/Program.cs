@@ -379,6 +379,10 @@ static class CliEntry
         if (report.WrongProfile == true)
             AnsiConsole.MarkupLine($"[yellow]Profile:[/]   wrong_profile=true — every rule was skipped for doc-kind '{Markup.Escape(resolvedDocKind)}'.");
 
+        var nonNormative = report.Verdicts.Where(v => v.ReasonCode == ReasonCodes.NonNormative).Select(v => v.RuleId).Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        if (nonNormative.Count > 0)
+            AnsiConsole.MarkupLine($"[yellow]Author warning:[/] {nonNormative.Count} rule(s) have no normative keyword and were skipped (policy-author review needed): {Markup.Escape(string.Join(", ", nonNormative))}");
+
         var emitReport = mode is "report" or "both";
         var emitMarkup = mode is "markup" or "both";
 
@@ -387,6 +391,12 @@ static class CliEntry
         {
             reportPath = Path.Combine(outDir, "report.json");
             File.WriteAllText(reportPath, RuleSetIO.SerializeReport(report));
+            if (applicabilityFloor > 0.0)
+            {
+                var exportRules = ruleset.Rules.ToDictionary(r => r.Id, r => r, StringComparer.Ordinal);
+                File.WriteAllText(Path.Combine(outDir, "review-findings.csv"),
+                    ReviewFindingsExport.ToCsv(report, exportRules), new System.Text.UTF8Encoding(false));
+            }
         }
 
         string? markupPath = null;
@@ -514,6 +524,7 @@ static class CliEntry
                 }
                 if (annotatePass)
                     annotations.AddRange(AnnotationFactory.BuildPassAnnotations(report, ruleLookup));
+                annotations.AddRange(AnnotationFactory.BuildPartialAnnotations(report, ruleLookup));
                 var gapsSummary = AnnotationFactory.BuildGapsSummary(report, ruleLookup);
                 if (gapsSummary is not null) annotations.Insert(0, gapsSummary);
                 try
@@ -663,6 +674,7 @@ static class CliEntry
                 VerdictOutcome.Pass => "[green]PASS[/]",
                 VerdictOutcome.Fail => "[red]FAIL[/]",
                 VerdictOutcome.Gap => "[yellow]GAP[/]",
+                VerdictOutcome.Partial => "[yellow]PARTIAL[/]",
                 VerdictOutcome.NotApplicable => "[dim]N/A[/]",
                 VerdictOutcome.Error => "[red bold]ERR[/]",
                 _ => v.Outcome.ToString(),
@@ -1254,7 +1266,10 @@ static class CliEntry
                 ["blocks_skipped_short"] = skipped.ToString(),
                 ["raw_suggestions"] = emitted.ToString(),
                 ["dedup_count"] = (emitted - deduped.Count).ToString(),
-            });
+            })
+        {
+            ScopeFacts = deduped.Any(r => r.AppliesWhen is { Count: > 0 }) ? ScopeFactCatalog.Build(deduped) : null,
+        };
 
         RuleSetIO.Save(ruleset, outPath);
         Console.WriteLine($"Examined:     {examined} blocks across {policyFiles.Count} files");

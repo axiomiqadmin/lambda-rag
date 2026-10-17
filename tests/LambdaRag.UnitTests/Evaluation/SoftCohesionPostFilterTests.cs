@@ -144,8 +144,8 @@ public class SoftCohesionPostFilterTests
 
         var report = await NewEvaluator(enforceSoftCohesion: true)
             .EvaluateAsync(ruleset, doc);
-        report.Verdicts.Single().Outcome.Should().Be(VerdictOutcome.NotApplicable,
-            "soft cohesion must demote a Pass driven by only 1 of 2 anchors");
+        report.Verdicts.Single().Outcome.Should().Be(VerdictOutcome.Gap,
+            "soft cohesion must demote a Pass driven by only 1 of 2 anchors to a Gap, not NotApplicable");
     }
 
     [Fact]

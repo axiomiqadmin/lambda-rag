@@ -87,10 +87,10 @@ public class ScopedFindingTests
         var report = await Build().EvaluateAsync(Set(rule), Doc(sections));
 
         report.Verdicts.Should().ContainSingle();
-        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        report.Verdicts[0].Outcome.Should().Be(VerdictOutcome.Gap);
         report.Verdicts[0].ErrorMessage.Should().StartWith("scope:not_established");
         report.Failed.Should().Be(0);
-        report.Gaps.Should().Be(0);
+        report.Gaps.Should().Be(1);
     }
 
     [Fact]
@@ -247,7 +247,7 @@ public class ScopedFindingTests
     }
 
     [Fact]
-    public async Task Authored_scope_matching_no_section_yields_not_applicable()
+    public async Task Authored_scope_matching_no_section_yields_gap()
     {
         var rule = BroadRule("R-SCOPE", "x", "input1.text.Contains(\"encrypted\")") with
         {
@@ -256,9 +256,9 @@ public class ScopedFindingTests
 
         var report = await Build().EvaluateAsync(Set(rule), Doc(("s1", "Billing runs monthly.")));
 
-        report.Verdicts.Should().ContainSingle().Which.Outcome.Should().Be(VerdictOutcome.NotApplicable);
+        report.Verdicts.Should().ContainSingle().Which.Outcome.Should().Be(VerdictOutcome.Gap);
         report.Failed.Should().Be(0);
-        report.Gaps.Should().Be(0);
+        report.Gaps.Should().Be(1);
     }
 
     [Fact]

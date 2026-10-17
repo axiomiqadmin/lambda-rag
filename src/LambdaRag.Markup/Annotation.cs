@@ -601,6 +601,35 @@ public static class AnnotationFactory
         }
     }
 
+    public static IEnumerable<Annotation> BuildPartialAnnotations(ComplianceReport report, IReadOnlyDictionary<string, Rule> rules)
+    {
+        foreach (var v in report.Verdicts)
+        {
+            if (v.Outcome is not VerdictOutcome.Partial) continue;
+            var rule = rules.GetValueOrDefault(v.RuleId);
+            var author = rule is null ? Author : CommentFormatting.BuildAuthor(rule);
+            var sb = new System.Text.StringBuilder();
+            sb.Append("Partial \u2014 ").Append(v.RuleId);
+            if (!string.IsNullOrWhiteSpace(rule?.NaturalLanguage))
+                sb.Append("\nRequirement: ").Append(rule!.NaturalLanguage);
+            if (!string.IsNullOrWhiteSpace(v.DocumentEvidence))
+                sb.Append("\nEvidence: \u201C").Append(v.DocumentEvidence).Append('\u201D');
+            if (v.MissingConditions is { Count: > 0 } missing)
+                sb.Append("\nNot proven: ").Append(string.Join("; ", missing));
+            if (!string.IsNullOrWhiteSpace(v.ReasonCode))
+                sb.Append("\nReason: ").Append(v.ReasonCode);
+            yield return new Annotation(
+                Id: ContentHash.Compose("annot", v.Id, "partial").Value,
+                Kind: AnnotationKind.Comment,
+                Span: v.SourceSpan,
+                Author: author,
+                Text: sb.ToString(),
+                Replacement: null);
+        }
+    }
+
+    private const int GroupedGapThreshold = 50;
+
     /// <summary>
     /// Build a single summary Annotation that lists every Gap verdict that
     /// has no safe reviewed-document span (see <see cref="IsScopedGap"/>) —
@@ -625,14 +654,29 @@ public static class AnnotationFactory
         sb.Append("\U0001F4CB LAMBDA-RAG GAP ANALYSIS — ")
           .Append(gaps.Count)
           .AppendLine(" mandatory topic(s) not addressed:");
-        foreach (var v in gaps)
+        // Large lists are grouped by category (ordinal) so reviewers can scan
+        // them; small lists keep the flat rule-id order.
+        var grouped = gaps.Count > GroupedGapThreshold;
+        var entries = gaps.Select(v =>
         {
             var rule = rules.GetValueOrDefault(v.RuleId);
-            var nl = rule?.NaturalLanguage ?? v.RuleId;
             var label = rule is null ? CommentFormatting.GenericLabel
                                      : CommentFormatting.ResolveCategoryLabel(rule);
-            sb.Append("\n• [").Append(label).Append(" / ")
-              .Append(v.RuleId).Append("] ").Append(nl);
+            return (Verdict: v, Label: label, Text: rule?.NaturalLanguage ?? v.RuleId);
+        });
+        if (grouped)
+        {
+            // Long lists are not readable as a single comment: point at the
+            // rule-level exports instead (review-findings.csv / report.json).
+            foreach (var grp in entries.GroupBy(e => e.Label, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.Ordinal))
+                sb.Append("\n• ").Append(grp.Key).Append(": ").Append(grp.Count());
+            sb.Append("\n\nSee review-findings.csv and report.json for rule-level findings and evidence.");
+        }
+        else
+        {
+            foreach (var e in entries)
+                sb.Append("\n• [").Append(e.Label).Append(" / ")
+                  .Append(e.Verdict.RuleId).Append("] ").Append(e.Text);
         }
         var anchorSpan = new SourceSpan(report.DocumentId.Value, 0, 0, null, null);
         return new Annotation(

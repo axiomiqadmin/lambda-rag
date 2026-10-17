@@ -9,6 +9,11 @@ it reaches `1.0.0`.
 
 ### Added
 
+- Authoring: `extract-rules` now emits per-rule `requiredConcepts` and `appliesWhen`
+  (validated against the source quote) and derives `RuleSet.ScopeFacts` via
+  `ScopeFactCatalog`. New sample policy `samples/policies/azure-recommended-practices/`
+  (PDF built by `scripts/build_policy_pdf.py`) and generated ruleset
+  `rulesets/architecture-review/azure-recommended-v1.json`.
 - `review` markup now appends an N/A appendix to `reviewed.docx` (a child
   heading under an existing "Appendix" section, otherwise a new top-level
   appendix). The table lists each N/A rule, its definition, the probable
@@ -17,6 +22,38 @@ it reaches `1.0.0`.
 
 ### Changed
 
+- **Partial outcome, reason codes, authored semantics (floor-gated / additive)**:
+  new `Partial` verdict (some but not all mandatory clauses or qualifiers
+  evidenced) with `reasonCode`, `satisfiedConditions`, `missingConditions`; rules
+  gain optional signed `requiredConcepts` (authored synonym groups, never derived
+  from the reviewed document) and `appliesWhen`; rulesets gain optional
+  `scopeFacts` (evidence-phrase backed) so N/A is explicit, not inferred.
+  `review-findings.csv` is written beside `report.json`; the grouped Gap comment
+  is now a short pointer; non-normative rules are Skipped (`NON_NORMATIVE`) with
+  a policy-author warning. New fields fold into fingerprints only when set, so
+  existing rulesets and goldens are unchanged.
+- **Strict review placement (opt-in via `--applicability-floor > 0`)**: a Pass must
+  be proven by one sentence that satisfies the rule's lambda and carries the rule's
+  narrowing qualifiers ("only", "external"); the comment anchors on that sentence
+  (`anchorKind: evidence_sentence`, `documentEvidence`) instead of the section
+  heading. A rule passing in several sections yields one primary Pass plus
+  `supportingEvidence[]`. No single proving sentence gives a `partial_evidence`
+  Gap. Rules with no normative word (shall/must/should/required) are `Skipped`
+  (`non_normative`). Silence on Optional/Conditional rules is a Gap, not
+  NotApplicable. Gap summaries over 50 entries are grouped by category. Default
+  output (floor 0) is unchanged.
+- Not applicable now requires direct, rule-specific evidence:
+  `AbsenceEvidence.FindExclusion` needs a negation that directly governs the
+  rule's subject terms ("no X" / "without X" look right; "X is not used" /
+  "X is out of scope" look left; multi-word `topicSlug` terms all required,
+  single-word slugs ignored), and
+  soft-cohesion demotion of a thinly evidenced Pass now yields Gap instead of
+  Not applicable.
+- With `--applicability-floor`, glossary/acronym sections (`category: definitions`)
+  never host a verdict, and a section must mention a qualifier word of the
+  rule's subject phrase ("Database" in "Database authentication SHALL …"), so a
+  lambda keyword such as "managed identity" can no longer Pass an unrelated
+  section.
 - Match-all rules with only inferred scope (topic overlap / lexical floor) no
   longer emit per-section missing-requirement gaps. They roll up: dropped if
   any section passes, otherwise one document-level gap in the top-of-document
