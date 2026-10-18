@@ -9,6 +9,12 @@ it reaches `1.0.0`.
 
 ### Added
 
+- Authoring: oversized/invalid model responses are retried on two deterministic halves of the chunk (and chunks over 4000 chars are split instead of truncated); `appliesWhen` fact names are restricted to platform / cloud provider / product / tenancy; the concept prompt now asks for 2-4 core concept lists with stems and synonyms and no quantifier words.
+- Strict mode: placement and proof now apply to rules with an authored scope predicate (not only `true`); authored `requiredConcepts` are mandatory for a Pass (a bare lambda hit without them is Partial); glossary sections never host a Pass.
+- Scope facts for `product` / `tenancy` are established only by explicit exclusivity phrases.
+- Regenerated `rulesets/architecture-review/azure-recommended-v1.json` (400 rules).
+- Strict mode (`--applicability-floor > 0`): silence on a conditional/optional rule whose trigger
+  is not established is now a Gap, never Not Applicable.
 - Authoring: `extract-rules` now emits per-rule `requiredConcepts` and `appliesWhen`
   (validated against the source quote) and derives `RuleSet.ScopeFacts` via
   `ScopeFactCatalog`. New sample policy `samples/policies/azure-recommended-practices/`

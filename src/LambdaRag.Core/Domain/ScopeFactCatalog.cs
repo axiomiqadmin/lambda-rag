@@ -17,6 +17,12 @@ public static class ScopeFactCatalog
         "hosted on {0}",
     ];
 
+    // Products/tenancy are routinely combined, so only an explicit exclusivity statement establishes them.
+    private static readonly string[] ExclusiveTemplates = Templates[..2];
+
+    private static string[] TemplatesFor(string factName) =>
+        factName is "platform" or "cloud provider" ? Templates : ExclusiveTemplates;
+
     public static IReadOnlyList<ScopeFact> Build(IEnumerable<Rule> rules)
     {
         var sets = new SortedDictionary<string, (string Name, List<string> Values)>(StringComparer.Ordinal);
@@ -36,7 +42,7 @@ public static class ScopeFactCatalog
             .Select(s => new ScopeFact(
                 s.Name,
                 s.Values,
-                s.Values.SelectMany(v => Templates.Select(t => string.Format(System.Globalization.CultureInfo.InvariantCulture, t, v)))
+                s.Values.SelectMany(v => TemplatesFor(s.Name).Select(t => string.Format(System.Globalization.CultureInfo.InvariantCulture, t, v)))
                     .OrderBy(p => p, StringComparer.Ordinal).ToList()))
             .ToList();
     }

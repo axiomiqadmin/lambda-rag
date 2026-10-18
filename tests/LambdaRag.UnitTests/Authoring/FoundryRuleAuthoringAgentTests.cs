@@ -222,6 +222,50 @@ public class FoundryRuleAuthoringAgentTests
     }
 
     [Fact]
+    public void ValidateConcepts_requires_each_group_to_be_proven_by_the_quote()
+    {
+        var quote = "Breaking changes SHALL increment the major version.";
+        FoundryRuleAuthoringAgent.ValidateConcepts(
+            [["breaking change"], ["major version", "next major"]], quote).Should().BeNull();
+        FoundryRuleAuthoringAgent.ValidateConcepts(
+            [["breaking change"], ["semver bump"]], quote).Should().NotBeNull();
+    }
+
+    [Fact]
+    public void ParsedAppliesWhen_keeps_only_scope_fact_names()
+    {
+        var json = """
+        {"rules":[{"topicSlug":"IAM","naturalLanguage":"n","predicate":"input1.text.Contains(\"x\")","remediation":"r","sourceQuote":"q","obligation":"must","scopeTerms":["s"],"relevantExamples":["s a"],"irrelevantExamples":["b"],"requiredEvidence":["e"],"severity":"Deviation","severityBasis":"",
+          "appliesWhen":[{"fact":"Platform","values":["Cluster"]},{"fact":"environment","values":["production"]}]}]}
+        """;
+        var parsed = FoundryRuleAuthoringAgent.TryParseRulesEnvelope(json);
+
+        parsed.Should().NotBeNull();
+        parsed![0].AppliesWhen.Keys.Should().Equal("platform");
+    }
+
+    [Fact]
+    public async Task Invalid_envelope_on_large_chunk_is_retried_on_two_halves()
+    {
+        var good = """
+        {"rules":[{"topicSlug":"IAM","naturalLanguage":"n","predicate":"input1.text.Contains(\"x\")","remediation":"r","sourceQuote":"alpha clause","obligation":"must","scopeTerms":["scopeword"],"relevantExamples":["scopeword ingress here"],"irrelevantExamples":["unrelated billing text"],"requiredEvidence":["e"],"severity":"Deviation","severityBasis":""}]}
+        """;
+        var chat = new FakeChatClient(new Queue<Func<string>>(new Func<string>[]
+        {
+            () => "{ truncated",
+            () => good,
+            () => "{\"rules\":[]}",
+        }));
+        var agent = CreateAgent(chat);
+        var content = "alpha clause SHALL hold.\n" + new string('x', 900) + "\nbeta clause SHALL hold.";
+
+        var result = await agent.AuthorAsync(RequestWith(content));
+
+        chat.Calls.Should().Be(3);
+        result.Should().HaveCount(1);
+    }
+
+    [Fact]
     public async Task PermanentFailure_swallowed_returns_empty()
     {
         var chat = new FakeChatClient(new Queue<Func<string>>(new Func<string>[]

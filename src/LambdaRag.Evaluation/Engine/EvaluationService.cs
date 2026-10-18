@@ -370,7 +370,6 @@ public sealed class EvaluationService
 
             if (_applicabilityFloor > 0.0
                 && rule.GateThreshold <= 0
-                && string.Equals(rule.Predicate, "true", StringComparison.Ordinal)
                 && rule.SemanticAnchors is not { Count: > 0 }
                 && (rule.RequiredConcepts is { Count: > 0 }
                     || verdicts.Skip(ruleVerdictStart).Any(v => v.Outcome == VerdictOutcome.Pass)))
@@ -463,7 +462,7 @@ public sealed class EvaluationService
     /// its subject (tagged so the appendix can cite it); otherwise the
     /// applicability default (Mandatory → Gap).
     /// </summary>
-    private static (VerdictOutcome Outcome, string? Error, string? Remediation) ResolveSilence(
+    private (VerdictOutcome Outcome, string? Error, string? Remediation) ResolveSilence(
         Rule rule, ProjectedDocument document, string? diagnostic)
     {
         if (AbsenceEvidence.IsOutOfDocumentProcess(rule))
@@ -474,6 +473,9 @@ public sealed class EvaluationService
         // A floor-filtered rule is relevant but unevidenced: silence is a Gap
         // whatever its applicability (NotApplicable needs explicit exclusion).
         if (diagnostic is not null && diagnostic.StartsWith("applicability_floor:", StringComparison.Ordinal))
+            return (VerdictOutcome.Gap, diagnostic, $"Document does not address: {rule.NaturalLanguage}");
+        // Strict mode: an unestablished trigger is unresolved, never Not Applicable.
+        if (_applicabilityFloor > 0.0)
             return (VerdictOutcome.Gap, diagnostic, $"Document does not address: {rule.NaturalLanguage}");
         return (NoMatchOutcome(rule), diagnostic, NoMatchRemediation(rule));
     }
@@ -860,6 +862,7 @@ public sealed class EvaluationService
                 && idv.TryGetValue<string>(out var sid)
                 && string.Equals(sid, v.MatchedSectionId, StringComparison.Ordinal));
             if (section is null) continue;
+            if (IsDefinitionalSection(rule, section)) continue;
             firstPass ??= v;
             firstSection ??= section;
             var result = await ProvePassAsync(rule, section).ConfigureAwait(false);
@@ -882,6 +885,20 @@ public sealed class EvaluationService
         }
 
         for (var k = passIdx.Count - 1; k >= 0; k--) verdicts.RemoveAt(passIdx[k]);
+
+        if (proofs.Count == 0 && firstSection is null)
+        {
+            // Every lambda hit sat in a glossary-type section, which cannot evidence a control.
+            verdicts.Add(BuildVerdict(
+                rule, ruleSet,
+                outcome: VerdictOutcome.Gap,
+                section: null,
+                input: new JsonObject(),
+                span: rule.SourceSpan,
+                error: null,
+                remediationText: $"Document does not address: {rule.NaturalLanguage}"));
+            return;
+        }
 
         if (proofs.Count == 0)
         {
@@ -994,6 +1011,8 @@ public sealed class EvaluationService
             if (!lambdaOk && !ConceptsSatisfied(rule, unit)) continue;
 
             var lacking = qualifiers.Where(g => !g.SentenceWords.Any(words.Contains)).Select(g => g.RuleWord).ToList();
+            // Authored concepts are the rule's mandatory parts: a bare lambda hit lacking them is not proof.
+            if (rule.RequiredConcepts is { Count: > 0 } && !ConceptsSatisfied(rule, unit)) lacking.Add("concepts");
             var score = subject.Count(q => tokens.Any(s => SharesStem(s, q)));
 
             // Evidence is shown as the whole bullet/paragraph holding the

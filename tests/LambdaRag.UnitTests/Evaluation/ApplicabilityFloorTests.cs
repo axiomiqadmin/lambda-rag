@@ -350,6 +350,23 @@ public class ApplicabilityFloorTests
         report.Verdicts.Should().ContainSingle().Which.Outcome.Should().Be(VerdictOutcome.Gap);
     }
 
+    [Fact]
+    public async Task Conditional_rule_with_unestablished_trigger_is_Gap_not_NotApplicable()
+    {
+        var rule = MakeBroadRule(
+            "EA-COND",
+            evidenceQuote: "Where batch jobs run, they SHALL emit exemplars",
+            lambda: "input1.text.ToLower().Contains(\"exemplar\")") with
+        {
+            Applicability = RuleApplicability.Conditional,
+        };
+        var doc = Doc(("s-x", "Totally unrelated payroll content."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().ContainSingle().Which.Outcome.Should().Be(VerdictOutcome.Gap);
+    }
+
     // ── Applicability floor: keeps topic-matched sections ───────────────
 
     [Fact]

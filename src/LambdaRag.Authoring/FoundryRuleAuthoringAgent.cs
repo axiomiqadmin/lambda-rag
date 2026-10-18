@@ -167,19 +167,26 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         clauses into one rule.
 
         requiredConcepts (semantic alternatives, authored from the CLAUSE only):
-        one inner list per mandatory part of the clause (subject, action, and every
-        qualifier such as every/all/only/external/production/at least/cadence). Each
-        inner list holds 2-8 lowercase alternative wordings a compliant document might
-        use for that part. A sentence proves the rule only if it contains one
-        alternative from EVERY list, so include a list for each qualifier. At least
+        2-4 inner lists, one per CORE mandatory idea of the clause (typically the
+        subject/object and the required control or action). Do NOT put quantifier or
+        narrowing words (every, all, each, only, external, production) into the
+        lists: the engine checks those separately. Each
+        inner list holds 4-8 lowercase alternative wordings a compliant document might
+        use for that part: short stems (e.g. "encrypt" covers encrypted/encryption),
+        singular and plural forms, and common synonyms or paraphrases. Prefer short
+        key phrases (1-3 words) over whole clauses so valid paraphrases still match.
+        A sentence proves the rule only if it contains one
+        alternative from EVERY list. At least
         one alternative per list MUST appear (case-insensitively) in sourceQuote.
         Example for "Breaking changes SHALL increment the major version":
-          [["breaking change"], ["major version", "new major version", "next major version"]]
+          [["breaking change"], ["major version", "new major version", "next major version", "increment major", "bump major"]]
 
         appliesWhen (optional, only when the clause is specific to a technology,
         platform or operating condition, e.g. a clause about one hosting product):
-        a list of {fact, values}: a lowercase fact name (e.g. "platform") and the
-        aliases of the single accepted value. Omit it for general clauses. Never
+        a list of {fact, values}: a lowercase fact name and the aliases of the single
+        accepted value. Allowed fact names are ONLY "platform", "cloud provider",
+        "product" and "tenancy". Do NOT use environment, data sensitivity, workload
+        type or similar. Omit it for general clauses. Never
         invent conditions the clause does not state.
 
         If the input contains no normative clauses, return {"rules": []}.
@@ -207,6 +214,35 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         _minimumRequestInterval = TimeSpan.FromMinutes(1d / requestsPerMinute);
     }
 
+    private const int MaxChunkChars = 4000;
+    private const int MinSplitChars = 800;
+
+    // Splits at the line break nearest the midpoint (deterministic) and authors both halves.
+    private async Task<IReadOnlyList<RuleAuthoringSuggestion>> AuthorSplitAsync(
+        RuleAuthoringRequest request, CancellationToken ct)
+    {
+        var text = request.SourceContent;
+        var mid = text.Length / 2;
+        var cut = text.LastIndexOf('\n', mid);
+        if (cut < text.Length / 4) cut = text.IndexOf('\n', mid);
+        if (cut <= 0 || cut >= text.Length - 1) cut = mid;
+        var parts = new[] { (Offset: 0, Text: text[..cut]), (Offset: cut, Text: text[cut..]) };
+
+        var all = new List<RuleAuthoringSuggestion>();
+        foreach (var part in parts)
+        {
+            if (string.IsNullOrWhiteSpace(part.Text)) continue;
+            var span = request.SourceSpan with
+            {
+                CharStart = request.SourceSpan.CharStart + part.Offset,
+                CharLength = part.Text.Length,
+            };
+            all.AddRange(await AuthorAsync(request with { SourceContent = part.Text, SourceSpan = span }, ct)
+                .ConfigureAwait(false));
+        }
+        return all;
+    }
+
     public async Task<IReadOnlyList<RuleAuthoringSuggestion>> AuthorAsync(
         RuleAuthoringRequest request,
         CancellationToken ct = default)
@@ -216,9 +252,9 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             return Array.Empty<RuleAuthoringSuggestion>();
 
         var heading = request.SourceSpan.HeadingPath ?? "(no heading)";
-        var chunk = request.SourceContent.Length > 4000
-            ? request.SourceContent[..4000]
-            : request.SourceContent;
+        if (request.SourceContent.Length > MaxChunkChars)
+            return await AuthorSplitAsync(request, ct).ConfigureAwait(false);
+        var chunk = request.SourceContent;
         var userPrompt = $"Section heading: {heading}\nSection text:\n{chunk}";
 
         // ChatOptions aligned to the Foundry gpt-5.x supported request
@@ -277,6 +313,9 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
             _log.LogWarning(
                 "Foundry authoring response was not valid JSON envelope for chunk {DocId}@{Start}; response length={Len}.",
                 request.SourceSpan.DocumentId, request.SourceSpan.CharStart, responseText?.Length ?? 0);
+            // Oversized (truncated) responses: retry on two smaller halves.
+            if (chunk.Length > MinSplitChars)
+                return await AuthorSplitAsync(request, ct).ConfigureAwait(false);
             return Array.Empty<RuleAuthoringSuggestion>();
         }
 
@@ -459,7 +498,7 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         }
         """).RootElement.Clone();
 
-    internal static List<ExtractedRuleDto>? TryParseRulesEnvelope(string? raw)
+    public static List<ExtractedRuleDto>? TryParseRulesEnvelope(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
             return null;
@@ -534,17 +573,21 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                 var key = ((string?)o["fact"] ?? string.Empty).Trim().ToLowerInvariant();
                 var values = ReadStrings(o["values"]).Select(s => s.Trim().ToLowerInvariant()).Where(s => s.Length > 0)
                     .Distinct(StringComparer.Ordinal).ToList();
-                if (key.Length > 0 && values.Count > 0) result[key] = values;
+                if (key.Length > 0 && values.Count > 0 && ScopeFactNames.Contains(key)) result[key] = values;
             }
         return result;
     }
+
+    // Only facts a document can genuinely establish as scope; anything else is noise.
+    internal static readonly HashSet<string> ScopeFactNames =
+        new(["platform", "cloud provider", "product", "tenancy"], StringComparer.Ordinal);
 
     /// <summary>
     /// Deterministic self-consistency: every authored concept group must be
     /// satisfied by the clause's own verbatim quote (the policy proves itself),
     /// and alternatives must be plain phrases. Null when valid.
     /// </summary>
-    internal static string? ValidateConcepts(IReadOnlyList<List<string>> groups, string sourceQuote)
+    public static string? ValidateConcepts(IReadOnlyList<List<string>> groups, string sourceQuote)
     {
         foreach (var g in groups)
         {
@@ -826,7 +869,7 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         ["required"] = new JsonArray("text"),
     };
 
-    internal sealed class ExtractedRuleDto
+    public sealed class ExtractedRuleDto
     {
         public string TopicSlug { get; set; } = string.Empty;
         public string NaturalLanguage { get; set; } = string.Empty;
