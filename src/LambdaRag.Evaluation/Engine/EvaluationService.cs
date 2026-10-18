@@ -750,13 +750,21 @@ public sealed class EvaluationService
     private static bool IsDefinitionalSection(Rule rule, MatchedSection section)
     {
         if (section.Node is not JsonObject obj) return false;
+        var topic = rule.NaturalLanguage ?? string.Empty;
+        var heading = obj["heading_path"] is JsonValue hv && hv.TryGetValue<string>(out var h) ? h
+            : obj["heading"] is JsonValue hv2 && hv2.TryGetValue<string>(out var h2) ? h2 : string.Empty;
+        // References / bibliography sections only point at documentation; they prove nothing.
+        if (NonEvidentialHeading.IsMatch(heading.Split('/').LastOrDefault() ?? string.Empty)) return true;
         var category = obj["category"] is JsonValue cv && cv.TryGetValue<string>(out var c) ? c : null;
         if (!string.Equals(category, "definitions", StringComparison.OrdinalIgnoreCase)) return false;
-        var topic = rule.NaturalLanguage ?? string.Empty;
         return !topic.Contains("definition", StringComparison.OrdinalIgnoreCase)
             && !topic.Contains("glossary", StringComparison.OrdinalIgnoreCase)
             && !topic.Contains("acronym", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static readonly Regex NonEvidentialHeading = new(
+        @"\b(?:references?|bibliography|further reading|purpose|scope|introduction|about this document|revision history|document history|change log|table of contents)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex NormativeWord = new(
         @"\b(?:shall|must|should|required|requires|mandatory|prohibited|forbidden|may not|recommended)\b",
@@ -886,6 +894,28 @@ public sealed class EvaluationService
 
         for (var k = passIdx.Count - 1; k >= 0; k--) verdicts.RemoveAt(passIdx[k]);
 
+        if (proofs.Count == 0 && ComposeProof(rule, matches) is { } composed)
+        {
+            var composedSupport = composed.Support
+                .Select(p => new SupportingEvidence(SectionId(p.Section), p.Proof.Span.HeadingPath, p.Proof.Span, p.Proof.Quote))
+                .ToList();
+            verdicts.Add(BuildVerdict(
+                rule, ruleSet,
+                outcome: VerdictOutcome.Pass,
+                section: composed.PrimarySection,
+                input: SnapshotInput(composed.PrimarySection),
+                span: composed.Primary.Span,
+                error: null,
+                remediationText: null) with
+            {
+                AnchorKind = AnchorKinds.EvidenceSentence,
+                DocumentEvidence = composed.Primary.Quote,
+                SupportingEvidence = composedSupport,
+                ReasonCode = ReasonCodes.ComposedEvidence,
+            });
+            return;
+        }
+
         if (proofs.Count == 0 && firstSection is null)
         {
             // Every lambda hit sat in a glossary-type section, which cannot evidence a control.
@@ -957,7 +987,145 @@ public sealed class EvaluationService
 
     private static bool ConceptsSatisfied(Rule rule, string unit) =>
         rule.RequiredConcepts is { Count: > 0 } groups
-        && groups.All(g => g.Any(alt => !string.IsNullOrWhiteSpace(alt) && unit.Contains(alt.Trim(), StringComparison.OrdinalIgnoreCase)));
+        && groups.All(g => GroupSatisfied(rule, g, unit));
+
+    private static bool GroupSatisfied(Rule rule, IReadOnlyList<string> group, string unit, bool wordStart = false)
+    {
+        var present = group.Where(alt => !string.IsNullOrWhiteSpace(alt)
+            && (wordStart
+                ? Regex.IsMatch(unit, @"(?<![A-Za-z0-9])" + Regex.Escape(alt.Trim()), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                : unit.Contains(alt.Trim(), StringComparison.OrdinalIgnoreCase))).ToList();
+        if (present.Count == 0) return false;
+        // A clause that enumerates items ("A, B, C and D") needs every item, not any one.
+        return !IsEnumerationGroup(rule, group) || present.Count == group.Count(a => !string.IsNullOrWhiteSpace(a));
+    }
+
+    private static readonly Regex ListSeparator = new(
+        @"^(?:\s*,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    /// <summary>
+    /// True when at least three alternatives appear in the rule's own text as one
+    /// comma / and / or separated list, so they are enumerated items, not synonyms.
+    /// </summary>
+    private static bool IsEnumerationGroup(Rule rule, IReadOnlyList<string> group)
+    {
+        var quote = !string.IsNullOrWhiteSpace(rule.EvidenceQuote) ? rule.EvidenceQuote : rule.NaturalLanguage ?? string.Empty;
+        var alts = group.Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a.Trim()).ToList();
+        if (alts.Count < 3) return false;
+        var positions = alts
+            .Select(a => (Alt: a, Index: quote.IndexOf(a, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (positions.Any(p => p.Index < 0)) return false;
+        positions = positions.OrderBy(p => p.Index).ToList();
+        for (var i = 1; i < positions.Count; i++)
+        {
+            var prevEnd = positions[i - 1].Index + positions[i - 1].Alt.Length;
+            if (prevEnd > positions[i].Index) return false;
+            if (!ListSeparator.IsMatch(quote[prevEnd..positions[i].Index])) return false;
+        }
+        return true;
+    }
+
+    private static (SourceSpan Span, string Quote) EvidenceSpan(
+        MatchedSection section, string text, long bodyStart, int start, int length)
+    {
+        var span = new SourceSpan(
+            section.Span.DocumentId,
+            CharStart: (int)(bodyStart + start),
+            CharLength: length,
+            PageNumber: section.Span.PageNumber,
+            HeadingPath: section.Span.HeadingPath);
+        var quote = text.Substring(start, length);
+        var ls = text.LastIndexOf('\n', Math.Max(0, start - 1));
+        var ls0 = ls < 0 ? 0 : ls + 1;
+        var le = text.IndexOf('\n', start + length);
+        var le0 = le < 0 ? text.Length : le;
+        var line = text[ls0..le0].Trim();
+        if (line.Length is > 0 and <= 500 && ls0 <= start)
+        {
+            var lead = text[ls0..le0].Length - text[ls0..le0].TrimStart().Length;
+            span = span with { CharStart = (int)(bodyStart + ls0 + lead), CharLength = line.Length };
+            quote = line;
+        }
+        return (span, quote);
+    }
+
+    private sealed record ComposedProof(
+        PassProof Primary, MatchedSection PrimarySection, IReadOnlyList<(PassProof Proof, MatchedSection Section)> Support);
+
+    private const int MaxComposedSentences = 2;
+
+    private static readonly HashSet<string> GenericWords = new(StringComparer.Ordinal)
+    {
+        "azure", "service", "services", "microservices", "microsoft", "which", "their", "should", "using", "enforce", "provides", "across", "within",
+    };
+
+    /// <summary>
+    /// Complementary evidence: when no single sentence proves every authored concept,
+    /// a small set (at most two) of non-glossary sentences anywhere in the document
+    /// may jointly cover every concept group and every narrowing qualifier. Greedy
+    /// cover with positional tie-breaks keeps it deterministic.
+    /// </summary>
+    private static ComposedProof? ComposeProof(Rule rule, IReadOnlyList<MatchedSection> sections)
+    {
+        if (rule.RequiredConcepts is not { Count: >= 2 } groups) return null;
+        var qualifiers = RequiredQualifiers(rule);
+        var candidates = new List<(PassProof Proof, MatchedSection Section, HashSet<int> Covered, HashSet<string> Words)>();
+        foreach (var section in sections)
+        {
+            if (section.Node is not JsonObject obj || IsDefinitionalSection(rule, section)) continue;
+            // Front matter (document control tables, TOC) has no heading and is not evidence.
+            if (string.IsNullOrWhiteSpace(section.Span.HeadingPath?.Trim('/', ' '))) continue;
+            var text = obj["text"] is JsonValue tv && tv.TryGetValue<string>(out var ts) ? ts : string.Empty;
+            if (text.Length == 0) continue;
+            long bodyStart = section.Span.CharStart;
+            if (obj["text_char_start"] is JsonValue bv)
+            {
+                if (bv.TryGetValue<long>(out var lv)) bodyStart = lv;
+                else if (bv.TryGetValue<int>(out var iv)) bodyStart = iv;
+            }
+            foreach (var (start, length) in SplitUnits(text))
+            {
+                var unit = text.Substring(start, length);
+                var covered = Enumerable.Range(0, groups.Count).Where(i => GroupSatisfied(rule, groups[i], unit, wordStart: true)).ToHashSet();
+                if (covered.Count == 0) continue;
+                var words = Regex.Matches(unit.ToLowerInvariant(), "[a-z0-9]+").Select(m => m.Value).ToHashSet(StringComparer.Ordinal);
+                var (span, quote) = EvidenceSpan(section, text, bodyStart, start, length);
+                candidates.Add((new PassProof(span, quote, covered.Count), section, covered, words));
+            }
+        }
+        if (candidates.Count == 0) return null;
+
+        var remaining = Enumerable.Range(0, groups.Count).ToHashSet();
+        var chosen = new List<(PassProof Proof, MatchedSection Section, HashSet<int> Covered, HashSet<string> Words)>();
+        while (remaining.Count > 0 && chosen.Count < MaxComposedSentences)
+        {
+            var next = candidates
+                .Where(c => !chosen.Contains(c))
+                .Select(c => (Candidate: c, Gain: c.Covered.Count(remaining.Contains)))
+                .Where(x => x.Gain > 0)
+                .OrderByDescending(x => x.Gain)
+                .ThenBy(x => x.Candidate.Proof.Span.CharStart)
+                .ThenBy(x => x.Candidate.Proof.Span.DocumentId, StringComparer.Ordinal)
+                .Select(x => ((PassProof Proof, MatchedSection Section, HashSet<int> Covered, HashSet<string> Words)?)x.Candidate)
+                .FirstOrDefault();
+            if (next is null) break;
+            chosen.Add(next.Value);
+            remaining.ExceptWith(next.Value.Covered);
+        }
+        if (remaining.Count > 0 || chosen.Count < 2) return null;
+        // The anchor sentence must itself carry at least half of the concepts.
+        if (chosen[0].Covered.Count * 2 < groups.Count) return null;
+        if (qualifiers.Any(q => !chosen.Any(c => q.SentenceWords.Any(c.Words.Contains)))) return null;
+
+        // Complementary sentences must be about the same thing: share a distinctive word.
+        var shared = chosen[0].Words.Where(w => w.Length >= 5 && !GenericWords.Contains(w));
+        if (chosen.Skip(1).Any(c => !shared.Any(c.Words.Contains))) return null;
+
+        var primary = chosen[0];
+        return new ComposedProof(primary.Proof, primary.Section, chosen.Skip(1).Select(c => (c.Proof, c.Section)).ToList());
+    }
 
     private sealed record PassProof(SourceSpan Span, string Quote, int Score);
 
@@ -1017,24 +1185,7 @@ public sealed class EvaluationService
 
             // Evidence is shown as the whole bullet/paragraph holding the
             // proving sentence, so adjacent sentences of one statement stay together.
-            var span = new SourceSpan(
-                section.Span.DocumentId,
-                CharStart: (int)(bodyStart + start),
-                CharLength: length,
-                PageNumber: section.Span.PageNumber,
-                HeadingPath: section.Span.HeadingPath);
-            var quote = unit;
-            var ls = text.LastIndexOf('\n', Math.Max(0, start - 1));
-            var ls0 = ls < 0 ? 0 : ls + 1;
-            var le = text.IndexOf('\n', start + length);
-            var le0 = le < 0 ? text.Length : le;
-            var line = text[ls0..le0].Trim();
-            if (line.Length is > 0 and <= 500 && ls0 <= start)
-            {
-                var lead = text[ls0..le0].Length - text[ls0..le0].TrimStart().Length;
-                span = span with { CharStart = (int)(bodyStart + ls0 + lead), CharLength = line.Length };
-                quote = line;
-            }
+            var (span, quote) = EvidenceSpan(section, text, bodyStart, start, length);
             var proof = new PassProof(span, quote, score);
 
             if (lacking.Count == 0)

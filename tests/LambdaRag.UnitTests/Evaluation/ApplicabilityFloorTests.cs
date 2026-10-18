@@ -241,6 +241,43 @@ public class ApplicabilityFloorTests
     }
 
     [Fact]
+    public async Task Enumerated_items_in_one_concept_group_must_all_be_present()
+    {
+        var rule = MakeBroadRule(
+            "EA-IDEM",
+            evidenceQuote: "GET, PUT and DELETE operations SHALL be idempotent",
+            lambda: "input1.text.ToLower().Contains(\"zzz\")") with
+        {
+            RequiredConcepts = [["get", "put", "delete"], ["idempotent"]],
+        };
+
+        var partial = await Build(applicabilityFloor: 0.2)
+            .EvaluateAsync(Set(rule), Doc(("s-a", "POST and PATCH are idempotent via keys, as is get.")));
+        partial.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.Pass);
+
+        var full = await Build(applicabilityFloor: 0.2)
+            .EvaluateAsync(Set(rule), Doc(("s-b", "The get, put and delete operations are idempotent.")));
+        full.Verdicts.Should().Contain(v => v.Outcome == VerdictOutcome.Pass);
+    }
+
+    [Fact]
+    public async Task References_section_is_not_evidence()
+    {
+        var rule = MakeBroadRule(
+            "EA-REF",
+            evidenceQuote: "Breaking changes SHALL increment the major version",
+            lambda: "input1.text.ToLower().Contains(\"increment the major version\")") with
+        {
+            RequiredConcepts = [["breaking change"], ["new major version"]],
+        };
+        var doc = Doc(("1.4 References", "Breaking changes require a new major version."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.Pass);
+    }
+
+    [Fact]
     public async Task Missing_concept_group_does_not_pass()
     {
         var rule = MakeBroadRule(

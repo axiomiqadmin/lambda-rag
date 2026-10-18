@@ -27,6 +27,7 @@ public static class ReasonCodes
     public const string EvidenceNotCohesive = "EVIDENCE_NOT_COHESIVE";
     public const string NonNormative = "NON_NORMATIVE";
     public const string ScopeFactExcluded = "SCOPE_FACT_EXCLUDED";
+    public const string ComposedEvidence = "COMPOSED_EVIDENCE";
 }
 
 /// <summary>

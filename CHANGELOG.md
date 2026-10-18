@@ -28,6 +28,7 @@ it reaches `1.0.0`.
 
 ### Changed
 
+- Strict review: References/Purpose/Scope/glossary sections are never evidence; an enumeration concept group ("GET, PUT and DELETE") now needs every item; when no single sentence proves a rule, up to two related sentences may jointly cover every concept group and qualifier (`COMPOSED_EVIDENCE`). Authoring prompt asks for broader mechanism synonyms and at most 4 concept groups; `azure-recommended-v1.json` regenerated (rule IDs renumbered).
 - **Partial outcome, reason codes, authored semantics (floor-gated / additive)**:
   new `Partial` verdict (some but not all mandatory clauses or qualifiers
   evidenced) with `reasonCode`, `satisfiedConditions`, `missingConditions`; rules

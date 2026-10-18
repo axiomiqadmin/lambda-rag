@@ -175,7 +175,13 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         use for that part: short stems (e.g. "encrypt" covers encrypted/encryption),
         singular and plural forms, and common synonyms or paraphrases. Prefer short
         key phrases (1-3 words) over whole clauses so valid paraphrases still match.
-        A sentence proves the rule only if it contains one
+        Include the mechanism-level equivalents a reviewer would accept (e.g. for an
+        immutable image reference: "digest", "sha", "pinned"; for progressive
+        exposure: "canary", "blue-green", "staged rollout"; for a dedicated secret
+        store: "key vault", "vault", "secret store"). Never make a list of
+        descriptors such as "sensitive data" or "production" a concept. For a clause
+        that enumerates items (A, B and C), put the items in ONE list: the engine then
+        requires all of them. A sentence proves the rule only if it contains one
         alternative from EVERY list. At least
         one alternative per list MUST appear (case-insensitively) in sourceQuote.
         Example for "Breaking changes SHALL increment the major version":
@@ -485,7 +491,7 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                   "scopeTerms":      { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3 } },
                   "scopeDescription": { "type": "string" },
                   "requiredEvidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-                  "requiredConcepts": { "type": "array", "maxItems": 6, "items": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3, "maxLength": 60 } } },
+                  "requiredConcepts": { "type": "array", "maxItems": 4, "items": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3, "maxLength": 60 } } },
                   "appliesWhen": { "type": "array", "maxItems": 3, "items": { "type": "object", "additionalProperties": false, "required": ["fact", "values"], "properties": { "fact": { "type": "string", "minLength": 2, "maxLength": 40 }, "values": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 2, "maxLength": 60 } } } } },
                   "relevantExamples":   { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
                   "irrelevantExamples": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
