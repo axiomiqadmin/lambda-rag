@@ -340,6 +340,41 @@ public class ApplicabilityFloorTests
     }
 
     [Fact]
+    public async Task Vendor_wide_product_statement_does_not_exclude_a_rule_about_one_of_its_products()
+    {
+        var rule = MakeBroadRule(
+            "EA-VENDOR",
+            evidenceQuote: "Every Service Bus queue SHALL have a dead-letter queue policy",
+            lambda: "input1.text.ToLower().Contains(\"dead-letter\")") with
+        {
+            AppliesWhen = new Dictionary<string, IReadOnlyList<string>> { ["product"] = ["azure service bus"] },
+        };
+        var set = Set(rule) with
+        {
+            ScopeFacts = [new ScopeFact("product", ["azure"], ["deployed exclusively on azure"])],
+        };
+        var doc = Doc(("s-p", "The platform is deployed exclusively on Azure."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(set, doc);
+
+        report.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.NotApplicable);
+    }
+
+    [Fact]
+    public async Task Glued_modal_from_pdf_extraction_is_still_a_requirement()
+    {
+        var rule = MakeBroadRule(
+            "EA-GLUED",
+            evidenceQuote: "MUSTNOT derive the tenant from an unvalidated client-supplied value.",
+            lambda: "input1.text.ToLower().Contains(\"zzz\")");
+        var doc = Doc(("s-p", "Tenancy is described elsewhere."));
+
+        var report = await Build(applicabilityFloor: 0.2).EvaluateAsync(Set(rule), doc);
+
+        report.Verdicts.Should().NotContain(v => v.Outcome == VerdictOutcome.Skipped);
+    }
+
+    [Fact]
     public async Task Rule_passing_in_many_sections_gets_one_primary_pass_with_supporting_evidence()
     {
         var rule = MakeBroadRule(

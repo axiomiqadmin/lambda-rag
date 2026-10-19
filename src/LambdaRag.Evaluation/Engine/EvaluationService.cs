@@ -782,8 +782,15 @@ public sealed class EvaluationService
     /// it cannot be Passed or reported as a Gap.
     /// </summary>
     private static bool IsNonNormative(Rule rule) =>
-        !NormativeWord.IsMatch(rule.NaturalLanguage ?? string.Empty)
-        && !NormativeWord.IsMatch(rule.EvidenceQuote ?? string.Empty);
+        !HasNormativeWord(rule.NaturalLanguage) && !HasNormativeWord(rule.EvidenceQuote);
+
+    // Extracted PDF text can glue an upper-case modal to its neighbour ("MUSTNOT", "SHALLensure").
+    private static readonly Regex GluedModal = new(
+        @"(?:SHALL|MUST|SHOULD)(?:NOT)?",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static bool HasNormativeWord(string? text) =>
+        !string.IsNullOrEmpty(text) && (NormativeWord.IsMatch(text) || GluedModal.IsMatch(text));
 
     private static readonly Regex ModalSplit = new(
         @"\b(?:shall|must|should|may|will)\b",

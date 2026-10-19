@@ -159,10 +159,16 @@ public static class AbsenceEvidence
         {
             if (!established.TryGetValue(name, out var fact)) continue;
             if (accepted.Any(a => fact.Values.Contains(a.Trim()))) continue;
+            // A vendor-wide statement ("deployed exclusively on Azure") says nothing about which of that
+            // vendor's products are absent, so it cannot exclude a rule about one of its products.
+            if (name == "product" && accepted.Any(a => fact.Values.Any(v => ContainsWholeWords(a, v) || a.Trim().StartsWith(v.Trim().Split(' ')[0] + " ", StringComparison.OrdinalIgnoreCase)))) continue;
             return $"scope_fact:{name}={string.Join("|", fact.Values.OrderBy(v => v, StringComparer.Ordinal))}; rule applies when {string.Join("|", accepted)}; evidence: {fact.Evidence}";
         }
         return null;
     }
+
+    private static bool ContainsWholeWords(string haystack, string needle) =>
+        System.Text.RegularExpressions.Regex.IsMatch(haystack, @"(?<![A-Za-z0-9])" + System.Text.RegularExpressions.Regex.Escape(needle.Trim()) + @"(?![A-Za-z0-9])", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// <summary>All "text" and "title" string values in the projected graph, in document order.</summary>
     public static IReadOnlyList<string> CollectText(JsonNode? node)
