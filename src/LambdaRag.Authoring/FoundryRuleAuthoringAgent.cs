@@ -179,7 +179,12 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
         immutable image reference: "digest", "sha", "pinned"; for progressive
         exposure: "canary", "blue-green", "staged rollout"; for a dedicated secret
         store: "key vault", "vault", "secret store"). Never make a list of
-        descriptors such as "sensitive data" or "production" a concept. For a clause
+        descriptors such as "sensitive data", "production workload", "internet-facing"
+        or "backend" a concept, and never make the rationale or purpose of the clause
+        ("so that a faulty release affects only a subset of users") a concept: use at
+        most 3 lists, only for the control itself and its mechanism or frequency.
+        Write alternatives as the short stems a document would use ("annual" not
+        "annually", "retry" not "retry policy"). For a clause
         that enumerates items (A, B and C), put the items in ONE list: the engine then
         requires all of them. A sentence proves the rule only if it contains one
         alternative from EVERY list. At least
@@ -491,7 +496,7 @@ public sealed class FoundryRuleAuthoringAgent : IRuleAuthoringAgent
                   "scopeTerms":      { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3 } },
                   "scopeDescription": { "type": "string" },
                   "requiredEvidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-                  "requiredConcepts": { "type": "array", "maxItems": 4, "items": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3, "maxLength": 60 } } },
+                  "requiredConcepts": { "type": "array", "maxItems": 3, "items": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 3, "maxLength": 60 } } },
                   "appliesWhen": { "type": "array", "maxItems": 3, "items": { "type": "object", "additionalProperties": false, "required": ["fact", "values"], "properties": { "fact": { "type": "string", "minLength": 2, "maxLength": 40 }, "values": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 2, "maxLength": 60 } } } } },
                   "relevantExamples":   { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },
                   "irrelevantExamples": { "type": "array", "minItems": 1, "maxItems": 3, "items": { "type": "string", "minLength": 1, "maxLength": 400 } },

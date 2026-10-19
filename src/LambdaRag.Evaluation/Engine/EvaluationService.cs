@@ -755,12 +755,18 @@ public sealed class EvaluationService
             : obj["heading"] is JsonValue hv2 && hv2.TryGetValue<string>(out var h2) ? h2 : string.Empty;
         // References / bibliography sections only point at documentation; they prove nothing.
         if (NonEvidentialHeading.IsMatch(heading.Split('/').LastOrDefault() ?? string.Empty)) return true;
+        // Sections that only describe the document itself (its guide and notation) prove nothing about the solution.
+        if (heading.Split('/').Any(s => DocumentGuideHeading.IsMatch(s))) return true;
         var category = obj["category"] is JsonValue cv && cv.TryGetValue<string>(out var c) ? c : null;
         if (!string.Equals(category, "definitions", StringComparison.OrdinalIgnoreCase)) return false;
         return !topic.Contains("definition", StringComparison.OrdinalIgnoreCase)
             && !topic.Contains("glossary", StringComparison.OrdinalIgnoreCase)
             && !topic.Contains("acronym", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static readonly Regex DocumentGuideHeading = new(
+        @"^\s*(?:\d+(?:\.\d+)*\.?\s*)?(?:introduction|architectural representation|document conventions|how to read this document)\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly Regex NonEvidentialHeading = new(
         @"\b(?:references?|bibliography|further reading|purpose|scope|introduction|about this document|revision history|document history|change log|table of contents)\b",
@@ -985,21 +991,101 @@ public sealed class EvaluationService
     private static string? SectionId(MatchedSection s) =>
         s.Node is JsonObject o && o["id"] is JsonValue v && v.TryGetValue<string>(out var id) ? id : null;
 
-    private static bool ConceptsSatisfied(Rule rule, string unit) =>
-        rule.RequiredConcepts is { Count: > 0 } groups
-        && groups.All(g => GroupSatisfied(rule, g, unit));
-
-    private static bool GroupSatisfied(Rule rule, IReadOnlyList<string> group, string unit, bool wordStart = false)
+    private static bool ConceptsSatisfied(Rule rule, string unit)
     {
-        var present = group.Where(alt => !string.IsNullOrWhiteSpace(alt)
-            && (wordStart
-                ? Regex.IsMatch(unit, @"(?<![A-Za-z0-9])" + Regex.Escape(alt.Trim()), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-                : unit.Contains(alt.Trim(), StringComparison.OrdinalIgnoreCase))).ToList();
-        if (present.Count == 0) return false;
-        // A clause that enumerates items ("A, B, C and D") needs every item, not any one.
-        return !IsEnumerationGroup(rule, group) || present.Count == group.Count(a => !string.IsNullOrWhiteSpace(a));
+        var compiled = CompiledConcepts.For(rule);
+        if (compiled.Groups.Count == 0) return false;
+        var (covered, strong) = compiled.Match(unit);
+        return strong && covered.Count == compiled.Groups.Count;
     }
 
+    private sealed record ConceptAlt(string[] Tokens, bool Strong);
+
+    private sealed record ConceptGroup(List<ConceptAlt> Alts, bool Enumeration);
+
+    /// <summary>
+    /// Authored concept groups, normalised once per rule: scope descriptors
+    /// ("production", "workload") are dropped, words are stemmed so inflections
+    /// match whole tokens only ("sca" never matches "scan"), and a match needs at
+    /// least one multi-word phrase hit, so bare generic words ("shared", "data")
+    /// cannot prove a rule alone.
+    /// </summary>
+    private sealed class CompiledConcepts
+    {
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Rule, CompiledConcepts> Cache = new();
+        private static readonly HashSet<string> Generic = new(StringComparer.Ordinal)
+        {
+            "production", "prod", "workload", "workloads", "application", "applications", "app", "every", "each", "all",
+            "live", "solution", "selected", "the", "a", "an", "of", "for", "to", "in", "and", "or", "per",
+        };
+
+        public List<ConceptGroup> Groups { get; } = [];
+
+        public static CompiledConcepts For(Rule rule) => Cache.GetValue(rule, Build);
+
+        private static CompiledConcepts Build(Rule rule)
+        {
+            var dropped = BuildWith(rule, dropGeneric: true);
+            // Dropping descriptors must leave at least two concepts, or a rule would be proven by one word.
+            return dropped.Groups.Count >= 2 ? dropped : BuildWith(rule, dropGeneric: false);
+        }
+
+        private static CompiledConcepts BuildWith(Rule rule, bool dropGeneric)
+        {
+            var result = new CompiledConcepts();
+            foreach (var group in rule.RequiredConcepts ?? [])
+            {
+                var enumeration = IsEnumerationGroup(rule, group);
+                var alts = new List<ConceptAlt>();
+                foreach (var raw in group.Where(a => !string.IsNullOrWhiteSpace(a)))
+                {
+                    var words = Regex.Matches(raw.ToLowerInvariant(), "[a-z0-9]+").Select(m => m.Value).Where(w => !dropGeneric || !Generic.Contains(w)).ToList();
+                    if (words.Count == 0) continue;
+                    alts.Add(new ConceptAlt(words.Select(Stem).ToArray(), Strong: words.Count > 1 || enumeration));
+                }
+                // A group made only of descriptors carries no concept.
+                if (alts.Count > 0) result.Groups.Add(new ConceptGroup(alts, enumeration));
+            }
+            return result;
+        }
+
+        public (HashSet<int> Covered, bool Strong) Match(string unit)
+        {
+            var tokens = Regex.Matches(unit.ToLowerInvariant(), "[a-z0-9]+").Select(m => Stem(m.Value)).ToArray();
+            var covered = new HashSet<int>();
+            var strong = false;
+            for (var i = 0; i < Groups.Count; i++)
+            {
+                var g = Groups[i];
+                var hits = g.Alts.Where(a => ContainsSeq(tokens, a.Tokens)).ToList();
+                if (hits.Count == 0) continue;
+                if (g.Enumeration && g.Alts.Any(a => !ContainsSeq(tokens, a.Tokens))) continue;
+                covered.Add(i);
+                strong |= hits.Any(h => h.Strong);
+            }
+            return (covered, strong);
+        }
+
+        private static bool ContainsSeq(string[] tokens, string[] seq)
+        {
+            for (var i = 0; i + seq.Length <= tokens.Length; i++)
+            {
+                var ok = true;
+                for (var j = 0; j < seq.Length && ok; j++) ok = tokens[i + j] == seq[j];
+                if (ok) return true;
+            }
+            return false;
+        }
+
+        private static readonly string[] Suffixes = ["ations", "ation", "ions", "ion", "ings", "ing", "ed", "ly", "s"];
+
+        private static string Stem(string w)
+        {
+            foreach (var s in Suffixes)
+                if (w.Length - s.Length >= 4 && w.EndsWith(s, StringComparison.Ordinal)) { w = w[..^s.Length]; break; }
+            return w.Length > 4 && w.EndsWith('e') ? w[..^1] : w;
+        }
+    }
     private static readonly Regex ListSeparator = new(
         @"^(?:\s*,\s*(?:and\s+|or\s+)?|\s+(?:and|or)\s+)$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -1069,7 +1155,10 @@ public sealed class EvaluationService
     /// </summary>
     private static ComposedProof? ComposeProof(Rule rule, IReadOnlyList<MatchedSection> sections)
     {
-        if (rule.RequiredConcepts is not { Count: >= 2 } groups) return null;
+        if (rule.RequiredConcepts is not { Count: >= 2 }) return null;
+        var compiled = CompiledConcepts.For(rule);
+        var groups = compiled.Groups;
+        if (groups.Count < 2) return null;
         var qualifiers = RequiredQualifiers(rule);
         var candidates = new List<(PassProof Proof, MatchedSection Section, HashSet<int> Covered, HashSet<string> Words)>();
         foreach (var section in sections)
@@ -1088,7 +1177,7 @@ public sealed class EvaluationService
             foreach (var (start, length) in SplitUnits(text))
             {
                 var unit = text.Substring(start, length);
-                var covered = Enumerable.Range(0, groups.Count).Where(i => GroupSatisfied(rule, groups[i], unit, wordStart: true)).ToHashSet();
+                var (covered, _) = compiled.Match(unit);
                 if (covered.Count == 0) continue;
                 var words = Regex.Matches(unit.ToLowerInvariant(), "[a-z0-9]+").Select(m => m.Value).ToHashSet(StringComparer.Ordinal);
                 var (span, quote) = EvidenceSpan(section, text, bodyStart, start, length);
@@ -1115,6 +1204,7 @@ public sealed class EvaluationService
             remaining.ExceptWith(next.Value.Covered);
         }
         if (remaining.Count > 0 || chosen.Count < 2) return null;
+        if (!chosen.Any(c => compiled.Match(c.Proof.Quote).Strong)) return null;
         // The anchor sentence must itself carry at least half of the concepts.
         if (chosen[0].Covered.Count * 2 < groups.Count) return null;
         if (qualifiers.Any(q => !chosen.Any(c => q.SentenceWords.Any(c.Words.Contains)))) return null;

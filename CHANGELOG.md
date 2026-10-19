@@ -28,6 +28,7 @@ it reaches `1.0.0`.
 
 ### Changed
 
+- Strict review (QC round 2): authored concepts are compiled per rule - stemmed whole-token matching (`sca` no longer matches `scan`), scope descriptors ("production", "workload") dropped when at least two concepts remain, and a Pass needs at least one multi-word phrase hit so generic words ("shared") cannot prove a rule. Document-guide sections (Introduction, Architectural Representation) are not evidence. Authoring prompt now asks for at most 3 concept groups, no rationale/descriptor groups, short stems; `azure-recommended-v1.json` regenerated (429 rules).
 - Strict review: References/Purpose/Scope/glossary sections are never evidence; an enumeration concept group ("GET, PUT and DELETE") now needs every item; when no single sentence proves a rule, up to two related sentences may jointly cover every concept group and qualifier (`COMPOSED_EVIDENCE`). Authoring prompt asks for broader mechanism synonyms and at most 4 concept groups; `azure-recommended-v1.json` regenerated (rule IDs renumbered).
 - **Partial outcome, reason codes, authored semantics (floor-gated / additive)**:
   new `Partial` verdict (some but not all mandatory clauses or qualifiers
